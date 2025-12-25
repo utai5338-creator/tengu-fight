@@ -15,20 +15,103 @@
   #ground { position:absolute; left:0; right:0; bottom:0; height:18px; background:#1f1f1f; box-shadow: 0 -1px 0 rgba(255,255,255,.05) inset; }
 
   .fighter{
-    position:absolute; bottom:18px;
-    width:64px; height:96px;
-    border-radius:14px;
-    box-shadow: 0 10px 25px rgba(0,0,0,.35);
-    user-select:none;
-    will-change:left, bottom, transform, filter;
-    transition: filter .06s linear;
+  position:absolute; bottom:18px;
+  width:64px; height:96px;
+
+  /* 四角→人型感（胴体） */
+  border-radius:18px 18px 14px 14px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.35);
+
+  user-select:none;
+  will-change:left, bottom, transform, filter;
+  transition: filter .06s linear, transform .06s linear;
+
+  /* パーツ（頭・腕・足）を擬似要素で描く */
+  overflow: visible;
+}
+
+/* 頭（上にちょこんと丸） */
+.fighter::before{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:-18px;
+  width:42px; height:42px;
+  transform: translateX(-50%);
+  border-radius:999px;
+  background: rgba(255,255,255,.14);
+  box-shadow: 0 6px 14px rgba(0,0,0,.25);
+}
+
+/* 腕（左右）＋ 足（下）を1枚で表現 */
+.fighter::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:18px;
+  width:88px; height:74px;
+  transform: translateX(-50%);
+  pointer-events:none;
+
+  /* 腕2本＋足2本をグラデで描く */
+  background:
+    /* 左腕 */
+    linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 0% 18% / 18px 42px no-repeat,
+    /* 右腕 */
+    linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 100% 18% / 18px 42px no-repeat,
+    /* 左足 */
+    linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 38% 100% / 14px 18px no-repeat,
+    /* 右足 */
+    linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat;
+
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,.25));
+}
+  .face{
+  position:absolute;
+  left:10px; right:10px;
+  top:22px;
+  height:42px;
+  border-radius:14px;
+  background: linear-gradient(
+    rgba(255,255,255,.14),
+    rgba(255,255,255,.06)
+  );
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
   }
-  #p1 { background:#3498db; }
-  #cpu { background:#e74c3c; transform: scaleX(-1); }
 
-  .name { position:absolute; top:-22px; left:0; right:0; text-align:center; font-size:12px; opacity:.9; font-weight:800; }
-  .face { position:absolute; left:12px; right:12px; bottom:14px; height:36px; border-radius:999px; background:rgba(255,255,255,.12); }
+  /* ガード中はさらに“構え感” */
+.guarding::before{ background: rgba(255,255,255,.08); }
+.guarding::after{
+  /* 腕を前に寄せてガードっぽく */
+  background:
+    linear-gradient(rgba(255,255,255,.16), rgba(255,255,255,.16)) 30% 18% / 18px 42px no-repeat,
+    linear-gradient(rgba(255,255,255,.16), rgba(255,255,255,.16)) 70% 18% / 18px 42px no-repeat,
+    linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 38% 100% / 14px 18px no-repeat,
+    linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat;
+}
 
+/* 弱P：腕がちょい前（短め） */
+.punching::after{
+  background:
+    linear-gradient(rgba(255,255,255,.20), rgba(255,255,255,.20)) 10% 18% / 24px 36px no-repeat,
+    linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 100% 18% / 18px 42px no-repeat,
+    linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 38% 100% / 14px 18px no-repeat,
+    linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat;
+}
+
+/* 強K：足が伸びた感（下の棒を長く） */
+.kicking::after{
+  background:
+    linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 0% 18% / 18px 42px no-repeat,
+    linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 100% 18% / 18px 42px no-repeat,
+    linear-gradient(rgba(0,0,0,.22), rgba(0,0,0,.22)) 32% 100% / 14px 26px no-repeat,
+    linear-gradient(rgba(0,0,0,.22), rgba(0,0,0,.22)) 68% 100% / 14px 26px no-repeat;
+}
+
+/* 波動拳の“発光感”（HADOUKEN!の瞬間にpunchingが付くので拳っぽく光らせる） */
+.punching::before{
+  box-shadow: 0 0 18px rgba(120,200,255,.55), 0 6px 14px rgba(0,0,0,.25);
+}
   /* ヒットボックス：攻撃の種類でサイズが変わる */
   .hitbox{
     position:absolute;
