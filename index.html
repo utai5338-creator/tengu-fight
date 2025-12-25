@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Mini Fight</title>
+<style>
+  :root { --w: 100vw; --h: 100vh; }
+  body { margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; background:#111; color:#fff; touch-action:none; }
+  #ui { position:fixed; top:0; left:0; right:0; padding:10px; display:flex; gap:10px; align-items:center; z-index:10; background:linear-gradient(#111, rgba(17,17,17,.2)); }
+  .bar { flex:1; height:14px; background:#333; border-radius:999px; overflow:hidden; }
+  .bar > div { height:100%; width:100%; background:#2ecc71; transition: width .08s linear, background .2s; }
+  #msg { min-width:9em; text-align:center; font-weight:700; }
+  #arena { position:fixed; left:0; right:0; top:44px; bottom:120px; background:radial-gradient(circle at 50% 20%, #222, #0b0b0b 65%); overflow:hidden; }
+  #ground { position:absolute; left:0; right:0; bottom:0; height:18px; background:#1f1f1f; box-shadow: 0 -1px 0 rgba(255,255,255,.05) inset; }
+
+  .fighter {
+    position:absolute; bottom:18px;
+    width:64px; height:96px;
+    border-radius:14px;
+    display:flex; align-items:flex-end; justify-content:center;
+    box-shadow: 0 10px 25px rgba(0,0,0,.35);
+    user-select:none;
+  }
+  #p1 { left:18%; background:#3498db; }
+  #cpu { left:72%; background:#e74c3c; transform: scaleX(-1); } /* 見た目だけ向き反転 */
+  .name { position:absolute; top:-22px; left:0; right:0; text-align:center; font-size:12px; opacity:.9; }
+  .face { width:40px; height:40px; margin-bottom:10px; border-radius:999px; background:rgba(255,255,255,.15); }
+  .hitbox {
+    position:absolute; bottom:18px;
+    width:36px; height:18px;
+    background:rgba(255,255,255,.25);
+    border-radius:8px;
+    opacity:0;
+    pointer-events:none;
+  }
+  .attacking .hitbox { opacity:1; }
+
+  #controls {
+    position:fixed; left:0; right:0; bottom:0; height:120px;
+    display:flex; gap:12px; padding:12px;
+    background:linear-gradient(rgba(17,17,17,.2), #111);
+    z-index:10;
+  }
+  .pad { flex:1; display:flex; gap:12px; }
+  button {
+    flex:1;
+    border:0; border-radius:18px;
+    background:#2a2a2a; color:#fff;
+    font-size:18px; font-weight:800;
+    box-shadow: 0 10px 18px rgba(0,0,0,.35);
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { transform: translateY(1px); filter:brightness(1.1); }
+  #attack { background:#f1c40f; color:#111; }
+  #restart { max-width:120px; }
+  .tiny { font-size:12px; opacity:.8; font-weight:600; }
+</style>
+</head>
+<body>
+  <div id="ui">
+    <div class="bar" aria-label="P1 HP"><div id="hp1"></div></div>
+    <div id="msg">FIGHT!</div>
+    <div class="bar" aria-label="CPU HP"><div id="hp2"></div></div>
+  </div>
+
+  <div id="arena">
+    <div id="p1" class="fighter">
+      <div class="name">YOU</div>
+      <div class="face"></div>
+      <div id="p1hit" class="hitbox"></div>
+    </div>
+    <div id="cpu" class="fighter">
+      <div class="name">CPU</div>
+      <div class="face"></div>
+      <div id="cpuhit" class="hitbox"></div>
+    </div>
+    <div id="ground"></div>
+  </div>
+
+  <div id="controls">
+    <div class="pad">
+      <button id="left">←<div class="tiny">移動</div></button>
+      <button id="right">→<div class="tiny">移動</div></button>
+    </div>
+    <button id="attack">👊<div class="tiny">攻撃</div></button>
+    <button id="restart">↻<div class="tiny">再開</div></button>
+  </div>
+
+<script>
+(() => {
+  // ======= ゲーム設定（ここだけいじると雰囲気変わる） =======
+  const MAX_HP = 100;
+  const DMG = 10;
+  const MOVE_SPEED = 5;          // 1フレームあたりの移動量
+  const ATTACK_RANGE = 60;       // 当たり判定の距離
+  const ATTACK_COOLDOWN_MS = 380;
+  const CPU_THINK_MS = 180;
+  // ===========================================================
+
+  const arena = document.getElementById('arena');
+  const p1El = document.getElementById('p1');
+  const cpuEl = document.getElementById('cpu');
+  const hp1El = document.getElementById('hp1');
+  const hp2El = document.getElementById('hp2');
+  const msgEl = document.getElementById('msg');
+
+  const btnL = document.getElementById('left');
+  const btnR = document.getElementById('right');
+  const btnA = document.getElementById('attack');
+  const btnRe = document.getElementById('restart');
+
+  const state = {
+    running: true,
+    p1: { x: 0, hp: MAX_HP, lastAtk: 0, dir: 1, attacking:false },
+    cpu:{ x: 0, hp: MAX_HP, lastAtk: 0, dir:-1, attacking:false },
+    input: { left:false, right:false, attack:false },
+    lastCpuThink: 0
+  };
+
+  function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+  function layoutInit(){
+    const w = arena.clientWidth;
+    state.p1.x = w * 0.20;
+    state.cpu.x = w * 0.70;
+    render();
+  }
+
+  function setMsg(t){ msgEl.textContent = t; }
+
+  function hpColor(hp){
+    const r = hp / MAX_HP;
+    if (r > 0.6) return '#2ecc71';
+    if (r > 0.3) return '#f1c40f';
+    return '#e74c3c';
+  }
+
+  function render(){
+    // 位置
+    p1El.style.left = `${state.p1.x}px`;
+    cpuEl.style.left = `${state.cpu.x}px`;
+
+    // 向き（見た目だけ）
+    state.p1.dir = (state.cpu.x >= state.p1.x) ? 1 : -1;
+    p1El.style.transform = `scaleX(${state.p1.dir})`;
+
+    // 攻撃エフェクト
+    p1El.classList.toggle('attacking', state.p1.attacking);
+    cpuEl.classList.toggle('attacking', state.cpu.attacking);
+
+    // HPバー
+    hp1El.style.width = `${(state.p1.hp / MAX_HP) * 100}%`;
+    hp2El.style.width = `${(state.cpu.hp / MAX_HP) * 100}%`;
+    hp1El.style.background = hpColor(state.p1.hp);
+    hp2El.style.background = hpColor(state.cpu.hp);
+  }
+
+  function distance(){
+    // ざっくり中心距離
+    return Math.abs((state.p1.x + 32) - (state.cpu.x + 32));
+  }
+
+  function canAttack(who, now){
+    return (now - who.lastAtk) >= ATTACK_COOLDOWN_MS;
+  }
+
+  function doAttack(attacker, defender, attackerEl){
+    const now = performance.now();
+    if (!state.running) return;
+    if (!canAttack(attacker, now)) return;
+
+    attacker.lastAtk = now;
+    attacker.attacking = true;
+
+    // 当たり判定：距離だけ（最小構成）
+    if (distance() <= ATTACK_RANGE) {
+      defender.hp = clamp(defender.hp - DMG, 0, MAX_HP);
+      setMsg('HIT!');
+      // ちょいノックバック
+      const push = (attacker === state.p1) ? -10 : 10;
+      defender.x = clamp(defender.x + push, 0, arena.clientWidth - 64);
+    } else {
+      setMsg('MISS');
+    }
+
+    // 攻撃表示を短時間だけ
+    setTimeout(() => {
+      attacker.attacking = false;
+    }, 120);
+
+    // 勝敗
+    if (defender.hp <= 0) {
+      state.running = false;
+      setMsg(attacker === state.p1 ? 'YOU WIN!' : 'CPU WIN!');
+    }
+
+    render();
+  }
+
+  // ======= 入力（スマホ向け：押してる間移動） =======
+  function bindHold(btn, key){
+    const on = (e)=>{ e.preventDefault(); state.input[key]=true; };
+    const off = (e)=>{ e.preventDefault(); state.input[key]=false; };
+
+    btn.addEventListener('pointerdown', on);
+    btn.addEventListener('pointerup', off);
+    btn.addEventListener('pointercancel', off);
+    btn.addEventListener('pointerleave', off);
+  }
+  bindHold(btnL, 'left');
+  bindHold(btnR, 'right');
+
+  btnA.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    doAttack(state.p1, state.cpu, p1El);
+  });
+
+  btnRe.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    reset();
+  });
+
+  // ======= CPU（超簡単AI） =======
+  function cpuThink(now){
+    // 近づく→レンジ内なら殴る→たまに下がる
+    const d = distance();
+    const toward = (state.p1.x > state.cpu.x) ? 1 : -1; // CPUが近づく方向
+    if (d > ATTACK_RANGE * 0.95) {
+      state.cpu.x += toward * MOVE_SPEED * 0.9;
+    } else {
+      // 6割で攻撃、4割で一歩下がる
+      if (Math.random() < 0.6) {
+        doAttack(state.cpu, state.p1, cpuEl);
+      } else {
+        state.cpu.x -= toward * MOVE_SPEED * 0.6;
+      }
+    }
+    state.cpu.x = clamp(state.cpu.x, 0, arena.clientWidth - 64);
+  }
+
+  // ======= メインループ =======
+  function tick(now){
+    if (state.running) {
+      // プレイヤー移動
+      if (state.input.left)  state.p1.x -= MOVE_SPEED;
+      if (state.input.right) state.p1.x += MOVE_SPEED;
+
+      // 画面内に収める
+      state.p1.x = clamp(state.p1.x, 0, arena.clientWidth - 64);
+
+      // CPU思考（間引き）
+      if (now - state.lastCpuThink > CPU_THINK_MS) {
+        state.lastCpuThink = now;
+        cpuThink(now);
+      }
+    }
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  function reset(){
+    state.running = true;
+    state.p1.hp = MAX_HP; state.cpu.hp = MAX_HP;
+    state.p1.lastAtk = 0; state.cpu.lastAtk = 0;
+    state.p1.attacking = false; state.cpu.attacking = false;
+    state.input.left = state.input.right = false;
+    setMsg('FIGHT!');
+    layoutInit();
+  }
+
+  // 初期化
+  window.addEventListener('resize', layoutInit);
+  layoutInit();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
