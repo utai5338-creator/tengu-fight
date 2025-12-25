@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Mini Fight</title>
+<title>Mini Fight (Jump)</title>
 <style>
   :root { --w: 100vw; --h: 100vh; }
   body { margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; background:#111; color:#fff; touch-action:none; }
   #ui { position:fixed; top:0; left:0; right:0; padding:10px; display:flex; gap:10px; align-items:center; z-index:10; background:linear-gradient(#111, rgba(17,17,17,.2)); }
   .bar { flex:1; height:14px; background:#333; border-radius:999px; overflow:hidden; }
   .bar > div { height:100%; width:100%; background:#2ecc71; transition: width .08s linear, background .2s; }
-  #msg { min-width:9em; text-align:center; font-weight:700; }
+  #msg { min-width:9em; text-align:center; font-weight:800; }
   #arena { position:fixed; left:0; right:0; top:44px; bottom:120px; background:radial-gradient(circle at 50% 20%, #222, #0b0b0b 65%); overflow:hidden; }
   #ground { position:absolute; left:0; right:0; bottom:0; height:18px; background:#1f1f1f; box-shadow: 0 -1px 0 rgba(255,255,255,.05) inset; }
 
@@ -21,6 +21,7 @@
     display:flex; align-items:flex-end; justify-content:center;
     box-shadow: 0 10px 25px rgba(0,0,0,.35);
     user-select:none;
+    will-change: left, bottom, transform;
   }
   #p1 { left:18%; background:#3498db; }
   #cpu { left:72%; background:#e74c3c; transform: scaleX(-1); } /* 見た目だけ向き反転 */
@@ -52,10 +53,10 @@
     -webkit-tap-highlight-color: transparent;
   }
   button:active { transform: translateY(1px); filter:brightness(1.1); }
-  #attack { background:#f1c40f; color:#111; }
   #jump { background:#9b59b6; }
+  #attack { background:#f1c40f; color:#111; }
   #restart { max-width:120px; }
-  .tiny { font-size:12px; opacity:.8; font-weight:600; }
+  .tiny { font-size:12px; opacity:.8; font-weight:650; }
 </style>
 </head>
 <body>
@@ -80,29 +81,32 @@
   </div>
 
   <div id="controls">
-  <div class="pad">
-    <button id="left">←<div class="tiny">移動</div></button>
-    <button id="right">→<div class="tiny">移動</div></button>
+    <div class="pad">
+      <button id="left">←<div class="tiny">移動</div></button>
+      <button id="right">→<div class="tiny">移動</div></button>
+    </div>
+
+    <button id="jump">⬆️<div class="tiny">ジャンプ</div></button>
+    <button id="attack">👊<div class="tiny">攻撃</div></button>
+
+    <button id="restart">↻<div class="tiny">再開</div></button>
   </div>
 
-  <button id="jump">⬆️<div class="tiny">ジャンプ</div></button>
-  <button id="attack">👊<div class="tiny">攻撃</div></button>
-
-  <button id="restart">↻<div class="tiny">再開</div></button>
-  </div>
 <script>
 (() => {
   // ======= ゲーム設定（ここだけいじると雰囲気変わる） =======
   const MAX_HP = 100;
   const DMG = 10;
+
   const MOVE_SPEED = 5;          // 1フレームあたりの移動量
   const ATTACK_RANGE = 60;       // 当たり判定の距離
   const ATTACK_COOLDOWN_MS = 380;
   const CPU_THINK_MS = 180;
 
-  const JUMP_V = 14;              // ジャンプ初速
-const GRAVITY = 0.75;           // 重力
-const LAND_LAG_MS = 150;        // 着地硬直
+  // ジャンプ（最小構成）
+  const JUMP_V = 14;             // ジャンプ初速
+  const GRAVITY = 0.75;          // 重力
+  const LAND_LAG_MS = 150;       // 着地硬直
   // ===========================================================
 
   const arena = document.getElementById('arena');
@@ -122,11 +126,12 @@ const LAND_LAG_MS = 150;        // 着地硬直
     running: true,
     p1: { x: 0, y: 0, vy: 0, lockUntil: 0, hp: MAX_HP, lastAtk: 0, dir: 1, attacking:false },
     cpu:{ x: 0, hp: MAX_HP, lastAtk: 0, dir:-1, attacking:false },
-    input: { left:false, right:false, attack:false },
+    input: { left:false, right:false },
     lastCpuThink: 0
   };
 
   function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+  function setMsg(t){ msgEl.textContent = t; }
 
   function layoutInit(){
     const w = arena.clientWidth;
@@ -134,8 +139,6 @@ const LAND_LAG_MS = 150;        // 着地硬直
     state.cpu.x = w * 0.70;
     render();
   }
-
-  function setMsg(t){ msgEl.textContent = t; }
 
   function hpColor(hp){
     const r = hp / MAX_HP;
@@ -147,10 +150,12 @@ const LAND_LAG_MS = 150;        // 着地硬直
   function render(){
     // 位置
     p1El.style.left = `${state.p1.x}px`;
-cpuEl.style.left = `${state.cpu.x}px`;
+    cpuEl.style.left = `${state.cpu.x}px`;
 
-p1El.style.bottom = `${18 + state.p1.y}px`; // ←追加（YOUだけジャンプ）
-cpuEl.style.bottom = `18px`;                // 念のため固定
+    // ジャンプ高さ（YOUだけ）
+    p1El.style.bottom = `${18 + state.p1.y}px`;
+    cpuEl.style.bottom = `18px`;
+
     // 向き（見た目だけ）
     state.p1.dir = (state.cpu.x >= state.p1.x) ? 1 : -1;
     p1El.style.transform = `scaleX(${state.p1.dir})`;
@@ -167,7 +172,6 @@ cpuEl.style.bottom = `18px`;                // 念のため固定
   }
 
   function distance(){
-    // ざっくり中心距離
     return Math.abs((state.p1.x + 32) - (state.cpu.x + 32));
   }
 
@@ -175,98 +179,93 @@ cpuEl.style.bottom = `18px`;                // 念のため固定
     return (now - who.lastAtk) >= ATTACK_COOLDOWN_MS;
   }
 
-  function doAttack(attacker, defender, attackerEl){
+  function doAttack(attacker, defender){
     const now = performance.now();
     if (!state.running) return;
+
+    // YOU側：空中・硬直中は攻撃不可（最小構成）
+    if (attacker === state.p1) {
+      if (state.p1.y > 0) { setMsg('AIR'); return; }
+      if (now < state.p1.lockUntil) return;
+    }
+
     if (!canAttack(attacker, now)) return;
 
     attacker.lastAtk = now;
     attacker.attacking = true;
 
-    function canAct(now){
-  return now >= state.p1.lockUntil;
-}
-
-function doJump(){
-  const now = performance.now();
-  if (!state.running) return;
-  if (!canAct(now)) return;
-
-  // 地面にいる時だけジャンプ可能
-  if (state.p1.y === 0) {
-    state.p1.vy = JUMP_V;
-    setMsg('JUMP!');
-  }
-}
-
-    // 当たり判定：距離だけ（最小構成）
     if (distance() <= ATTACK_RANGE) {
       defender.hp = clamp(defender.hp - DMG, 0, MAX_HP);
       setMsg('HIT!');
-      // ちょいノックバック
+      // ノックバック
       const push = (attacker === state.p1) ? -10 : 10;
       defender.x = clamp(defender.x + push, 0, arena.clientWidth - 64);
     } else {
       setMsg('MISS');
     }
 
-    // 攻撃表示を短時間だけ
-    setTimeout(() => {
-      attacker.attacking = false;
-    }, 120);
+    setTimeout(() => { attacker.attacking = false; }, 120);
 
-    // 勝敗
     if (defender.hp <= 0) {
       state.running = false;
       setMsg(attacker === state.p1 ? 'YOU WIN!' : 'CPU WIN!');
     }
-
     render();
+  }
+
+  function canAct(now){
+    return now >= state.p1.lockUntil;
+  }
+
+  function doJump(){
+    const now = performance.now();
+    if (!state.running) return;
+    if (!canAct(now)) return;
+
+    // 地面にいる時だけ
+    if (state.p1.y === 0) {
+      state.p1.vy = JUMP_V;
+      setMsg('JUMP!');
+    }
   }
 
   // ======= 入力（スマホ向け：押してる間移動） =======
   function bindHold(btn, key){
     const on = (e)=>{ e.preventDefault(); state.input[key]=true; };
     const off = (e)=>{ e.preventDefault(); state.input[key]=false; };
-
     btn.addEventListener('pointerdown', on);
     btn.addEventListener('pointerup', off);
     btn.addEventListener('pointercancel', off);
     btn.addEventListener('pointerleave', off);
-    btnJ.addEventListener('pointerdown', (e)=>{
-  e.preventDefault();
-  doJump();
-});
   }
   bindHold(btnL, 'left');
   bindHold(btnR, 'right');
 
+  btnJ.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    doJump();
+  });
+
   btnA.addEventListener('pointerdown', (e)=>{
-  e.preventDefault();
-  if (state.p1.y > 0) { setMsg('AIR'); return; } // 空中攻撃なし
-  if (performance.now() < state.p1.lockUntil) return; // 硬直中も不可
-  doAttack(state.p1, state.cpu, p1El);
-});
+    e.preventDefault();
+    doAttack(state.p1, state.cpu);
+  });
+
   btnRe.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
     reset();
   });
-  
 
   // ======= CPU（超簡単AI） =======
   function cpuThink(now){
-    // 近づく→レンジ内なら殴る→たまに下がる
     const d = distance();
-    const toward = (state.p1.x > state.cpu.x) ? 1 : -1; // CPUが近づく方向
+    const toward = (state.p1.x > state.cpu.x) ? 1 : -1;
+
     if (d > ATTACK_RANGE * 0.95) {
       state.cpu.x += toward * MOVE_SPEED * 0.9;
     } else {
-      // 6割で攻撃、4割で一歩下がる
-      if (Math.random() < 0.6) {
-        doAttack(state.cpu, state.p1, cpuEl);
-      } else {
-        state.cpu.x -= toward * MOVE_SPEED * 0.6;
-      }
+      if (Math.random() < 0.6) doAttack(state.cpu, state.p1);
+      else state.cpu.x -= toward * MOVE_SPEED * 0.6;
     }
     state.cpu.x = clamp(state.cpu.x, 0, arena.clientWidth - 64);
   }
@@ -274,25 +273,27 @@ function doJump(){
   // ======= メインループ =======
   function tick(now){
     if (state.running) {
-      // プレイヤー移動
-      if (now >= state.p1.lockUntil) {
-  if (state.input.left)  state.p1.x -= MOVE_SPEED;
-  if (state.input.right) state.p1.x += MOVE_SPEED;
-      }
-// --- ジャンプ物理 ---
-if (state.p1.y > 0 || state.p1.vy > 0) {
-  state.p1.y += state.p1.vy;
-  state.p1.vy -= GRAVITY;
+      // --- ジャンプ物理 ---
+      if (state.p1.y > 0 || state.p1.vy > 0) {
+        state.p1.y += state.p1.vy;
+        state.p1.vy -= GRAVITY;
 
-  // 着地
-  if (state.p1.y <= 0) {
-    state.p1.y = 0;
-    state.p1.vy = 0;
-    state.p1.lockUntil = now + LAND_LAG_MS; // 着地硬直
-    setMsg('LAND');
-  }
-}
-      // 画面内に収める
+        // 着地
+        if (state.p1.y <= 0) {
+          state.p1.y = 0;
+          state.p1.vy = 0;
+          state.p1.lockUntil = now + LAND_LAG_MS; // 着地硬直
+          setMsg('LAND');
+        }
+      }
+
+      // 移動（硬直中は動けない）
+      if (now >= state.p1.lockUntil) {
+        if (state.input.left)  state.p1.x -= MOVE_SPEED;
+        if (state.input.right) state.p1.x += MOVE_SPEED;
+      }
+
+      // 画面内
       state.p1.x = clamp(state.p1.x, 0, arena.clientWidth - 64);
 
       // CPU思考（間引き）
@@ -301,24 +302,35 @@ if (state.p1.y > 0 || state.p1.vy > 0) {
         cpuThink(now);
       }
     }
+
     render();
     requestAnimationFrame(tick);
   }
 
   function reset(){
     state.running = true;
-    state.p1.hp = MAX_HP; state.cpu.hp = MAX_HP;
-    state.p1.lastAtk = 0; state.cpu.lastAtk = 0;
-    state.p1.attacking = false; state.cpu.attacking = false;
-    state.input.left = state.input.right = false;
+
+    state.p1.hp = MAX_HP;
+    state.cpu.hp = MAX_HP;
+
+    state.p1.lastAtk = 0;
+    state.cpu.lastAtk = 0;
+
+    state.p1.attacking = false;
+    state.cpu.attacking = false;
+
+    state.input.left = false;
+    state.input.right = false;
+
+    // ジャンプ系リセット
+    state.p1.y = 0;
+    state.p1.vy = 0;
+    state.p1.lockUntil = 0;
+
     setMsg('FIGHT!');
     layoutInit();
-    state.p1.y = 0;
-state.p1.vy = 0;
-state.p1.lockUntil = 0;
   }
 
-  // 初期化
   window.addEventListener('resize', layoutInit);
   layoutInit();
   requestAnimationFrame(tick);
