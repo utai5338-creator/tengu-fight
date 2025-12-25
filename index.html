@@ -310,12 +310,17 @@
   }
 
   function hadouCommandReady(){
-    const t = nowMs();
-    const seq = state.p1.inputSeq.filter(x => (t - x.t) <= HADOU.inputWindowMs);
-    // 末尾2つが D -> R ならOK
-    if (seq.length < 2) return false;
-    const a = seq[seq.length - 2], b = seq[seq.length - 1];
-    return a.k === 'D' && b.k === 'R';
+  const t = nowMs();
+  // 直近inputWindowMs以内の入力だけ残す
+  state.p1.inputSeq = state.p1.inputSeq.filter(x => (t - x.t) <= HADOU.inputWindowMs);
+
+  // 「↓を最近押した」判定
+  const recentDown = state.p1.inputSeq.some(x => x.k === 'D');
+
+  // 「いま→が押されてる」判定（押しっぱOK）
+  const rightHeld = !!state.input.right;
+
+  return recentDown && rightHeld;
   }
 
   function clearHadouSeq(){
