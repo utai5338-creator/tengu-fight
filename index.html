@@ -114,12 +114,13 @@ const LAND_LAG_MS = 150;        // 着地硬直
 
   const btnL = document.getElementById('left');
   const btnR = document.getElementById('right');
+  const btnJ = document.getElementById('jump');
   const btnA = document.getElementById('attack');
   const btnRe = document.getElementById('restart');
 
   const state = {
     running: true,
-    p1: { x: 0, hp: MAX_HP, lastAtk: 0, dir: 1, attacking:false },
+    p1: { x: 0, y: 0, vy: 0, lockUntil: 0, hp: MAX_HP, lastAtk: 0, dir: 1, attacking:false },
     cpu:{ x: 0, hp: MAX_HP, lastAtk: 0, dir:-1, attacking:false },
     input: { left:false, right:false, attack:false },
     lastCpuThink: 0
@@ -146,8 +147,10 @@ const LAND_LAG_MS = 150;        // 着地硬直
   function render(){
     // 位置
     p1El.style.left = `${state.p1.x}px`;
-    cpuEl.style.left = `${state.cpu.x}px`;
+cpuEl.style.left = `${state.cpu.x}px`;
 
+p1El.style.bottom = `${18 + state.p1.y}px`; // ←追加（YOUだけジャンプ）
+cpuEl.style.bottom = `18px`;                // 念のため固定
     // 向き（見た目だけ）
     state.p1.dir = (state.cpu.x >= state.p1.x) ? 1 : -1;
     p1El.style.transform = `scaleX(${state.p1.dir})`;
@@ -179,6 +182,22 @@ const LAND_LAG_MS = 150;        // 着地硬直
 
     attacker.lastAtk = now;
     attacker.attacking = true;
+
+    function canAct(now){
+  return now >= state.p1.lockUntil;
+}
+
+function doJump(){
+  const now = performance.now();
+  if (!state.running) return;
+  if (!canAct(now)) return;
+
+  // 地面にいる時だけジャンプ可能
+  if (state.p1.y === 0) {
+    state.p1.vy = JUMP_V;
+    setMsg('JUMP!');
+  }
+}
 
     // 当たり判定：距離だけ（最小構成）
     if (distance() <= ATTACK_RANGE) {
@@ -214,19 +233,25 @@ const LAND_LAG_MS = 150;        // 着地硬直
     btn.addEventListener('pointerup', off);
     btn.addEventListener('pointercancel', off);
     btn.addEventListener('pointerleave', off);
+    btnJ.addEventListener('pointerdown', (e)=>{
+  e.preventDefault();
+  doJump();
+});
   }
   bindHold(btnL, 'left');
   bindHold(btnR, 'right');
 
   btnA.addEventListener('pointerdown', (e)=>{
-    e.preventDefault();
-    doAttack(state.p1, state.cpu, p1El);
-  });
-
+  e.preventDefault();
+  if (state.p1.y > 0) { setMsg('AIR'); return; } // 空中攻撃なし
+  if (performance.now() < state.p1.lockUntil) return; // 硬直中も不可
+  doAttack(state.p1, state.cpu, p1El);
+});
   btnRe.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
     reset();
   });
+  
 
   // ======= CPU（超簡単AI） =======
   function cpuThink(now){
@@ -250,9 +275,23 @@ const LAND_LAG_MS = 150;        // 着地硬直
   function tick(now){
     if (state.running) {
       // プレイヤー移動
-      if (state.input.left)  state.p1.x -= MOVE_SPEED;
-      if (state.input.right) state.p1.x += MOVE_SPEED;
+      if (now >= state.p1.lockUntil) {
+  if (state.input.left)  state.p1.x -= MOVE_SPEED;
+  if (state.input.right) state.p1.x += MOVE_SPEED;
+      }
+// --- ジャンプ物理 ---
+if (state.p1.y > 0 || state.p1.vy > 0) {
+  state.p1.y += state.p1.vy;
+  state.p1.vy -= GRAVITY;
 
+  // 着地
+  if (state.p1.y <= 0) {
+    state.p1.y = 0;
+    state.p1.vy = 0;
+    state.p1.lockUntil = now + LAND_LAG_MS; // 着地硬直
+    setMsg('LAND');
+  }
+}
       // 画面内に収める
       state.p1.x = clamp(state.p1.x, 0, arena.clientWidth - 64);
 
@@ -274,6 +313,9 @@ const LAND_LAG_MS = 150;        // 着地硬直
     state.input.left = state.input.right = false;
     setMsg('FIGHT!');
     layoutInit();
+    state.p1.y = 0;
+state.p1.vy = 0;
+state.p1.lockUntil = 0;
   }
 
   // 初期化
