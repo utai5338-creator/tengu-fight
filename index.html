@@ -103,6 +103,17 @@
   const ATTACK_COOLDOWN_MS = 380;
   const CPU_THINK_MS = 180;
 
+  function bindTap(btn, fn){
+  const handler = (e) => {
+    e.preventDefault?.();
+    fn();
+  };
+  bindTap(btnJ, () => doJump());
+bindTap(btnA, () => doAttack(state.p1, state.cpu));
+bindTap(btnRe, () => reset());
+  btn.addEventListener('click', (e)=>{ e.preventDefault(); fn(); });
+  }
+
   // ジャンプ（最小構成）
   const JUMP_V = 14;             // ジャンプ初速
   const GRAVITY = 0.75;          // 重力
