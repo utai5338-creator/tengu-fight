@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Mini Fight (Guard)</title>
+<title>Mini Fight (Hadouken)</title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; background:#111; color:#fff; touch-action:none; }
   #ui { position:fixed; top:0; left:0; right:0; padding:10px; display:flex; gap:10px; align-items:center; z-index:10; background:linear-gradient(#111, rgba(17,17,17,.2)); }
   .bar { flex:1; height:14px; background:#333; border-radius:999px; overflow:hidden; }
   .bar > div { height:100%; width:100%; transition: width .08s linear, background .2s; }
-  #msg { min-width:10em; text-align:center; font-weight:900; letter-spacing:.5px; }
+  #msg { min-width:12em; text-align:center; font-weight:900; letter-spacing:.5px; }
 
-  #arena { position:fixed; left:0; right:0; top:44px; bottom:140px; background:radial-gradient(circle at 50% 20%, #222, #0b0b0b 65%); overflow:hidden; }
+  #arena { position:fixed; left:0; right:0; top:44px; bottom:150px; background:radial-gradient(circle at 50% 20%, #222, #0b0b0b 65%); overflow:hidden; }
   #ground { position:absolute; left:0; right:0; bottom:0; height:18px; background:#1f1f1f; box-shadow: 0 -1px 0 rgba(255,255,255,.05) inset; }
 
   .fighter{
@@ -38,7 +38,6 @@
     border-radius:10px;
     opacity:0;
     pointer-events:none;
-    transform: translateZ(0);
   }
   #p1.punching .hitbox{ width:40px; background:rgba(255,255,255,.28); opacity:1; }
   #p1.kicking  .hitbox{ width:72px; background:rgba(255,255,255,.18); opacity:1; }
@@ -47,17 +46,26 @@
   #cpu.kicking  .hitbox{ width:72px; background:rgba(255,255,255,.18); opacity:1; }
 
   /* ガード中の見た目 */
-  .guarding{
-    filter: brightness(.65) saturate(.9);
+  .guarding{ filter: brightness(.65) saturate(.9); }
+
+  /* 波動拳（弾） */
+  .proj{
+    position:absolute;
+    width:18px; height:18px;
+    border-radius:999px;
+    background:rgba(120,200,255,.9);
+    box-shadow: 0 0 14px rgba(120,200,255,.55);
+    will-change:left, bottom;
   }
 
   #controls{
-    position:fixed; left:0; right:0; bottom:0; height:140px;
+    position:fixed; left:0; right:0; bottom:0; height:150px;
     display:flex; gap:12px; padding:12px;
     background:linear-gradient(rgba(17,17,17,.2), #111);
     z-index:10;
   }
-  .pad { flex:1; display:flex; gap:12px; }
+  .pad { flex:1.2; display:flex; gap:12px; }
+  .rightPad { flex:1; display:flex; gap:12px; }
   button{
     flex:1;
     border:0; border-radius:18px;
@@ -68,6 +76,7 @@
   }
   button:active{ transform: translateY(1px); filter:brightness(1.1); }
   #jump { background:#9b59b6; }
+  #down { background:#16a085; }
   #punch { background:#f1c40f; color:#111; }
   #kick { background:#e67e22; }
   #restart { max-width:120px; }
@@ -98,14 +107,16 @@
   <div id="controls">
     <div class="pad">
       <button id="left">←<div class="tiny">移動/ガード</div></button>
+      <button id="down">↓<div class="tiny">コマンド</div></button>
       <button id="right">→<div class="tiny">移動/ガード</div></button>
     </div>
 
-    <button id="jump">⬆️<div class="tiny">ジャンプ</div></button>
-    <button id="punch">👊<div class="tiny">弱P</div></button>
-    <button id="kick">🦵<div class="tiny">強K</div></button>
-
-    <button id="restart">↻<div class="tiny">再開</div></button>
+    <div class="rightPad">
+      <button id="jump">⬆️<div class="tiny">ジャンプ</div></button>
+      <button id="punch">👊<div class="tiny">弱P / 波動</div></button>
+      <button id="kick">🦵<div class="tiny">強K</div></button>
+      <button id="restart">↻<div class="tiny">再開</div></button>
+    </div>
   </div>
 
 <script>
@@ -123,14 +134,25 @@
   const CPU_THINK_MS = 160;
 
   // ガード
-  const GUARD_MULT = 0.33;       // ガード時の被ダメ倍率（1/3）
-  const GUARD_PUSH_MULT = 0.35;  // ガード時のノックバック倍率
-  const GUARD_HITSTOP_MS = 60;   // ガードした時のちょい硬直感
+  const GUARD_MULT = 0.33;
+  const GUARD_PUSH_MULT = 0.35;
+  const GUARD_HITSTOP_MS = 60;
 
   // 攻撃2種
   const ATTACKS = {
     punch: { label:'PUNCH', dmg: 7,  range: 52, activeMs: 90,  recoveryMs: 140, cooldownMs: 220, push: 8 },
     kick:  { label:'KICK',  dmg: 13, range: 78, activeMs: 130, recoveryMs: 260, cooldownMs: 420, push: 12 }
+  };
+
+  // 波動拳
+  const HADOU = {
+    dmg: 11,
+    speed: 7.2,           // 弾の速度
+    y: 46,                // 地面からの高さ
+    radius: 9,            // 当たり判定半径
+    cooldownMs: 700,
+    recoveryMs: 220,
+    inputWindowMs: 600    // ↓→ の猶予
   };
   // ============================
 
@@ -142,6 +164,7 @@
   const msgEl = document.getElementById('msg');
 
   const btnL = document.getElementById('left');
+  const btnD = document.getElementById('down');
   const btnR = document.getElementById('right');
   const btnJ = document.getElementById('jump');
   const btnP = document.getElementById('punch');
@@ -155,15 +178,18 @@
       lockUntil:0,
       hp:MAX_HP,
       lastAtkAt:{punch:0,kick:0},
-      guarding:false
+      guarding:false,
+      lastHadouAt: 0,
+      inputSeq: [] // {k:'D'|'R', t:ms}
     },
     cpu:{
       x:0,
       hp:MAX_HP,
       lastAtkAt:{punch:0,kick:0}
     },
-    input:{ left:false, right:false },
-    lastCpuThink: 0
+    input:{ left:false, right:false, down:false },
+    lastCpuThink: 0,
+    projectiles: [] // {x, vx, el}
   };
 
   const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
@@ -200,8 +226,13 @@
     hp1El.style.background = hpColor(state.p1.hp);
     hp2El.style.background = hpColor(state.cpu.hp);
 
-    // ガード見た目
     p1El.classList.toggle('guarding', state.p1.guarding);
+
+    // 弾の描画
+    for (const p of state.projectiles) {
+      p.el.style.left = `${p.x}px`;
+      p.el.style.bottom = `${18 + HADOU.y}px`;
+    }
   }
 
   function endIfDead(){
@@ -210,7 +241,6 @@
     return false;
   }
 
-  // スマホ安定タップ
   function bindTap(btn, fn){
     const handler = (e) => { e.preventDefault?.(); fn(); };
     btn.addEventListener('pointerdown', handler, { passive:false });
@@ -219,9 +249,8 @@
     btn.addEventListener('click', (e)=>{ e.preventDefault(); fn(); });
   }
 
-  // 押しっぱ（移動/ガード）
   function bindHold(btn, key){
-    const on  = (e)=>{ e.preventDefault?.(); state.input[key]=true; };
+    const on  = (e)=>{ e.preventDefault?.(); state.input[key]=true; onInputKey(key); };
     const off = (e)=>{ e.preventDefault?.(); state.input[key]=false; };
     btn.addEventListener('pointerdown', on, { passive:false });
     btn.addEventListener('touchstart', on, { passive:false });
@@ -250,10 +279,7 @@
   }
 
   function isP1GuardInput(){
-    // 地上のみ
     if (state.p1.y > 0) return false;
-
-    // 相手が右にいるなら「←」が後ろ、相手が左なら「→」が後ろ
     const cpuOnRight = state.cpu.x >= state.p1.x;
     const backHeld = cpuOnRight ? state.input.left : state.input.right;
     return !!backHeld;
@@ -269,11 +295,69 @@
     }
   }
 
+  // ---- コマンド入力（↓→） ----
+  function onInputKey(key){
+    const t = nowMs();
+    const k = (key === 'down') ? 'D' : (key === 'right' ? 'R' : (key === 'left' ? 'L' : '?'));
+    if (k === '?') return;
+
+    // 最低限：↓→だけ拾う。左は今は使わない
+    if (k === 'D' || k === 'R') {
+      state.p1.inputSeq.push({k, t});
+      // 古いの捨てる
+      state.p1.inputSeq = state.p1.inputSeq.filter(x => (t - x.t) <= HADOU.inputWindowMs);
+    }
+  }
+
+  function hadouCommandReady(){
+    const t = nowMs();
+    const seq = state.p1.inputSeq.filter(x => (t - x.t) <= HADOU.inputWindowMs);
+    // 末尾2つが D -> R ならOK
+    if (seq.length < 2) return false;
+    const a = seq[seq.length - 2], b = seq[seq.length - 1];
+    return a.k === 'D' && b.k === 'R';
+  }
+
+  function clearHadouSeq(){
+    state.p1.inputSeq.length = 0;
+  }
+  // ----------------------------
+
+  function spawnHadouken(){
+    const t = nowMs();
+    if (!state.running) return;
+    if (state.p1.y > 0) { setMsg('AIR'); return; }
+    if (t < state.p1.lockUntil) return;
+    if ((t - state.p1.lastHadouAt) < HADOU.cooldownMs) return;
+
+    state.p1.lastHadouAt = t;
+    setP1Lock(t, HADOU.recoveryMs);
+
+    const el = document.createElement('div');
+    el.className = 'proj';
+    arena.appendChild(el);
+
+    // 弾の初期位置：YOUの前あたり
+    const startX = state.p1.x + 64; // 右方向発射（今回は固定でOK）
+    state.projectiles.push({ x: startX, vx: HADOU.speed, el });
+
+    setMsg('HADOUKEN!');
+    clearHadouSeq();
+  }
+
   function doAttackP1(type){
     const t = nowMs();
     if (!state.running) return;
     if (state.p1.y > 0) { setMsg('AIR'); return; }
     if (t < state.p1.lockUntil) return;
+
+    // 👊押した瞬間、↓→が成立してたら波動拳を優先
+    if (type === 'punch' && hadouCommandReady()) {
+      spawnHadouken();
+      render();
+      return;
+    }
+
     if (!canUseAttack(state.p1, type, t)) return;
 
     const spec = ATTACKS[type];
@@ -294,27 +378,23 @@
     render();
   }
 
-  function applyHitToP1(spec){
+  function applyHitToP1(dmg, push){
     const t = nowMs();
-
     const guarding = state.p1.guarding && isP1GuardInput();
+
     if (guarding) {
-      const dmg = Math.max(1, Math.floor(spec.dmg * GUARD_MULT));
-      state.p1.hp = clamp(state.p1.hp - dmg, 0, MAX_HP);
+      const gdmg = Math.max(1, Math.floor(dmg * GUARD_MULT));
+      state.p1.hp = clamp(state.p1.hp - gdmg, 0, MAX_HP);
       setMsg('GUARD!');
-      // 押されるけど弱め
-      const push = Math.round(spec.push * GUARD_PUSH_MULT);
-      state.p1.x = clamp(state.p1.x + push, 0, arena.clientWidth - 64);
-      // ちょい硬直（ガードストップ感）
+      const gpush = Math.round(push * GUARD_PUSH_MULT);
+      state.p1.x = clamp(state.p1.x + gpush, 0, arena.clientWidth - 64);
       setP1Lock(t, GUARD_HITSTOP_MS);
       return;
     }
 
-    // ガード失敗（通常ヒット）
-    state.p1.hp = clamp(state.p1.hp - spec.dmg, 0, MAX_HP);
+    state.p1.hp = clamp(state.p1.hp - dmg, 0, MAX_HP);
     setMsg('HIT!');
-    state.p1.x = clamp(state.p1.x + spec.push, 0, arena.clientWidth - 64);
-    // 被弾硬直
+    state.p1.x = clamp(state.p1.x + push, 0, arena.clientWidth - 64);
     setP1Lock(t, 90);
   }
 
@@ -329,7 +409,7 @@
     showAttackAnim(cpuEl, type, spec.activeMs);
 
     if (distance() <= spec.range) {
-      applyHitToP1(spec);
+      applyHitToP1(spec.dmg, spec.push);
     } else {
       setMsg(`CPU ${spec.label} MISS`);
     }
@@ -342,16 +422,51 @@
     const d = distance();
     const toward = (state.p1.x > state.cpu.x) ? 1 : -1;
 
-    if (d > 95) {
+    if (d > 120) {
       state.cpu.x += toward * MOVE_SPEED * 0.85;
     } else {
       const r = Math.random();
       if (d <= ATTACKS.kick.range && r < 0.55) doAttackCPU('kick');
       else doAttackCPU('punch');
 
-      if (Math.random() < 0.25) state.cpu.x -= toward * MOVE_SPEED * 0.7;
+      if (Math.random() < 0.22) state.cpu.x -= toward * MOVE_SPEED * 0.7;
     }
     state.cpu.x = clamp(state.cpu.x, 0, arena.clientWidth - 64);
+  }
+
+  function updateProjectiles(){
+    // 弾移動＋当たり判定
+    const w = arena.clientWidth;
+
+    for (let i = state.projectiles.length - 1; i >= 0; i--) {
+      const p = state.projectiles[i];
+      p.x += p.vx;
+
+      // 当たり判定（弾中心 vs CPU中心）
+      const px = p.x + HADOU.radius;
+      const cx = state.cpu.x + 32;
+      const hit = Math.abs(px - cx) <= (HADOU.radius + 20); // ざっくり
+
+      if (hit) {
+        state.cpu.hp = clamp(state.cpu.hp - HADOU.dmg, 0, MAX_HP);
+        setMsg('HADOU HIT!');
+        // ちょいノックバック
+        state.cpu.x = clamp(state.cpu.x - 10, 0, w - 64);
+
+        // 消す
+        p.el.remove();
+        state.projectiles.splice(i, 1);
+
+        endIfDead();
+        continue;
+      }
+
+      // 画面外で消す
+      if (p.x > w + 40) {
+        p.el.remove();
+        state.projectiles.splice(i, 1);
+      }
+    }
   }
 
   function reset(){
@@ -363,6 +478,8 @@
     state.p1.vy = 0;
     state.p1.lockUntil = 0;
     state.p1.guarding = false;
+    state.p1.lastHadouAt = 0;
+    state.p1.inputSeq.length = 0;
 
     state.p1.lastAtkAt.punch = 0;
     state.p1.lastAtkAt.kick = 0;
@@ -371,6 +488,11 @@
 
     state.input.left = false;
     state.input.right = false;
+    state.input.down = false;
+
+    // 弾消す
+    for (const p of state.projectiles) p.el.remove();
+    state.projectiles.length = 0;
 
     setMsg('FIGHT!');
     layoutInit();
@@ -378,16 +500,18 @@
 
   // 入力
   bindHold(btnL, 'left');
+  bindHold(btnD, 'down');
   bindHold(btnR, 'right');
+
   bindTap(btnJ, () => doJump());
-  bindTap(btnP, () => doAttackP1('punch'));
+  bindTap(btnP, () => doAttackP1('punch')); // ↓→ + 👊 で波動拳
   bindTap(btnK, () => doAttackP1('kick'));
   bindTap(btnRe, () => reset());
 
   // ループ
   function tick(t){
     if (state.running) {
-      // ガード判定（毎フレーム更新）
+      // ガード
       state.p1.guarding = isP1GuardInput();
 
       // ジャンプ物理
@@ -408,6 +532,9 @@
         if (state.input.right) state.p1.x += MOVE_SPEED;
       }
       state.p1.x = clamp(state.p1.x, 0, arena.clientWidth - 64);
+
+      // 弾
+      updateProjectiles();
 
       // CPU
       if (t - state.lastCpuThink > CPU_THINK_MS) {
