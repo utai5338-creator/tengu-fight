@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Mini Fight (Punch & Kick)</title>
+<title>Mini Fight (Guard)</title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; background:#111; color:#fff; touch-action:none; }
   #ui { position:fixed; top:0; left:0; right:0; padding:10px; display:flex; gap:10px; align-items:center; z-index:10; background:linear-gradient(#111, rgba(17,17,17,.2)); }
@@ -20,12 +20,13 @@
     border-radius:14px;
     box-shadow: 0 10px 25px rgba(0,0,0,.35);
     user-select:none;
-    will-change:left, bottom, transform;
+    will-change:left, bottom, transform, filter;
+    transition: filter .06s linear;
   }
   #p1 { background:#3498db; }
   #cpu { background:#e74c3c; transform: scaleX(-1); }
 
-  .name { position:absolute; top:-22px; left:0; right:0; text-align:center; font-size:12px; opacity:.9; font-weight:700; }
+  .name { position:absolute; top:-22px; left:0; right:0; text-align:center; font-size:12px; opacity:.9; font-weight:800; }
   .face { position:absolute; left:12px; right:12px; bottom:14px; height:36px; border-radius:999px; background:rgba(255,255,255,.12); }
 
   /* ヒットボックス：攻撃の種類でサイズが変わる */
@@ -39,15 +40,16 @@
     pointer-events:none;
     transform: translateZ(0);
   }
-  .show-hitbox { opacity:1; }
-
-  /* YOU側：PUNCH/KICKで幅を変える */
   #p1.punching .hitbox{ width:40px; background:rgba(255,255,255,.28); opacity:1; }
   #p1.kicking  .hitbox{ width:72px; background:rgba(255,255,255,.18); opacity:1; }
 
-  /* CPU側も同様（分かりやすさ用） */
   #cpu.punching .hitbox{ width:40px; background:rgba(255,255,255,.28); opacity:1; }
   #cpu.kicking  .hitbox{ width:72px; background:rgba(255,255,255,.18); opacity:1; }
+
+  /* ガード中の見た目 */
+  .guarding{
+    filter: brightness(.65) saturate(.9);
+  }
 
   #controls{
     position:fixed; left:0; right:0; bottom:0; height:140px;
@@ -95,8 +97,8 @@
 
   <div id="controls">
     <div class="pad">
-      <button id="left">←<div class="tiny">移動</div></button>
-      <button id="right">→<div class="tiny">移動</div></button>
+      <button id="left">←<div class="tiny">移動/ガード</div></button>
+      <button id="right">→<div class="tiny">移動/ガード</div></button>
     </div>
 
     <button id="jump">⬆️<div class="tiny">ジャンプ</div></button>
@@ -120,7 +122,12 @@
   // CPU
   const CPU_THINK_MS = 160;
 
-  // 攻撃2種：差が“見える”ように（射程/隙/ダメ）
+  // ガード
+  const GUARD_MULT = 0.33;       // ガード時の被ダメ倍率（1/3）
+  const GUARD_PUSH_MULT = 0.35;  // ガード時のノックバック倍率
+  const GUARD_HITSTOP_MS = 60;   // ガードした時のちょい硬直感
+
+  // 攻撃2種
   const ATTACKS = {
     punch: { label:'PUNCH', dmg: 7,  range: 52, activeMs: 90,  recoveryMs: 140, cooldownMs: 220, push: 8 },
     kick:  { label:'KICK',  dmg: 13, range: 78, activeMs: 130, recoveryMs: 260, cooldownMs: 420, push: 12 }
@@ -143,8 +150,18 @@
 
   const state = {
     running: true,
-    p1: { x:0, y:0, vy:0, lockUntil:0, hp:MAX_HP, lastAtkAt:{punch:0,kick:0} },
-    cpu:{ x:0, hp:MAX_HP, lastAtkAt:{punch:0,kick:0} },
+    p1: {
+      x:0, y:0, vy:0,
+      lockUntil:0,
+      hp:MAX_HP,
+      lastAtkAt:{punch:0,kick:0},
+      guarding:false
+    },
+    cpu:{
+      x:0,
+      hp:MAX_HP,
+      lastAtkAt:{punch:0,kick:0}
+    },
     input:{ left:false, right:false },
     lastCpuThink: 0
   };
@@ -182,6 +199,9 @@
     hp2El.style.width = `${(state.cpu.hp / MAX_HP) * 100}%`;
     hp1El.style.background = hpColor(state.p1.hp);
     hp2El.style.background = hpColor(state.cpu.hp);
+
+    // ガード見た目
+    p1El.classList.toggle('guarding', state.p1.guarding);
   }
 
   function endIfDead(){
@@ -190,7 +210,7 @@
     return false;
   }
 
-  // 安定タップ（スマホ対策）
+  // スマホ安定タップ
   function bindTap(btn, fn){
     const handler = (e) => { e.preventDefault?.(); fn(); };
     btn.addEventListener('pointerdown', handler, { passive:false });
@@ -199,7 +219,7 @@
     btn.addEventListener('click', (e)=>{ e.preventDefault(); fn(); });
   }
 
-  // 押しっぱ移動
+  // 押しっぱ（移動/ガード）
   function bindHold(btn, key){
     const on  = (e)=>{ e.preventDefault?.(); state.input[key]=true; };
     const off = (e)=>{ e.preventDefault?.(); state.input[key]=false; };
@@ -229,6 +249,16 @@
     setTimeout(()=>el.classList.remove('punching','kicking'), ms);
   }
 
+  function isP1GuardInput(){
+    // 地上のみ
+    if (state.p1.y > 0) return false;
+
+    // 相手が右にいるなら「←」が後ろ、相手が左なら「→」が後ろ
+    const cpuOnRight = state.cpu.x >= state.p1.x;
+    const backHeld = cpuOnRight ? state.input.left : state.input.right;
+    return !!backHeld;
+  }
+
   function doJump(){
     const t = nowMs();
     if (!state.running) return;
@@ -242,7 +272,6 @@
   function doAttackP1(type){
     const t = nowMs();
     if (!state.running) return;
-
     if (state.p1.y > 0) { setMsg('AIR'); return; }
     if (t < state.p1.lockUntil) return;
     if (!canUseAttack(state.p1, type, t)) return;
@@ -250,13 +279,9 @@
     const spec = ATTACKS[type];
     state.p1.lastAtkAt[type] = t;
 
-    // 見た目
     showAttackAnim(p1El, type, spec.activeMs);
-
-    // 硬直（隙）
     setP1Lock(t, spec.recoveryMs);
 
-    // 判定
     if (distance() <= spec.range) {
       state.cpu.hp = clamp(state.cpu.hp - spec.dmg, 0, MAX_HP);
       setMsg(`${spec.label}! HIT`);
@@ -267,6 +292,30 @@
 
     endIfDead();
     render();
+  }
+
+  function applyHitToP1(spec){
+    const t = nowMs();
+
+    const guarding = state.p1.guarding && isP1GuardInput();
+    if (guarding) {
+      const dmg = Math.max(1, Math.floor(spec.dmg * GUARD_MULT));
+      state.p1.hp = clamp(state.p1.hp - dmg, 0, MAX_HP);
+      setMsg('GUARD!');
+      // 押されるけど弱め
+      const push = Math.round(spec.push * GUARD_PUSH_MULT);
+      state.p1.x = clamp(state.p1.x + push, 0, arena.clientWidth - 64);
+      // ちょい硬直（ガードストップ感）
+      setP1Lock(t, GUARD_HITSTOP_MS);
+      return;
+    }
+
+    // ガード失敗（通常ヒット）
+    state.p1.hp = clamp(state.p1.hp - spec.dmg, 0, MAX_HP);
+    setMsg('HIT!');
+    state.p1.x = clamp(state.p1.x + spec.push, 0, arena.clientWidth - 64);
+    // 被弾硬直
+    setP1Lock(t, 90);
   }
 
   function doAttackCPU(type){
@@ -280,10 +329,7 @@
     showAttackAnim(cpuEl, type, spec.activeMs);
 
     if (distance() <= spec.range) {
-      state.p1.hp = clamp(state.p1.hp - spec.dmg, 0, MAX_HP);
-      setMsg(`CPU ${spec.label}!`);
-      state.p1.x = clamp(state.p1.x + (spec.push), 0, arena.clientWidth - 64);
-      setP1Lock(t, 90);
+      applyHitToP1(spec);
     } else {
       setMsg(`CPU ${spec.label} MISS`);
     }
@@ -305,7 +351,6 @@
 
       if (Math.random() < 0.25) state.cpu.x -= toward * MOVE_SPEED * 0.7;
     }
-
     state.cpu.x = clamp(state.cpu.x, 0, arena.clientWidth - 64);
   }
 
@@ -317,6 +362,7 @@
     state.p1.y = 0;
     state.p1.vy = 0;
     state.p1.lockUntil = 0;
+    state.p1.guarding = false;
 
     state.p1.lastAtkAt.punch = 0;
     state.p1.lastAtkAt.kick = 0;
@@ -330,7 +376,7 @@
     layoutInit();
   }
 
-  // 入力バインド
+  // 入力
   bindHold(btnL, 'left');
   bindHold(btnR, 'right');
   bindTap(btnJ, () => doJump());
@@ -338,9 +384,12 @@
   bindTap(btnK, () => doAttackP1('kick'));
   bindTap(btnRe, () => reset());
 
-  // メインループ
+  // ループ
   function tick(t){
     if (state.running) {
+      // ガード判定（毎フレーム更新）
+      state.p1.guarding = isP1GuardInput();
+
       // ジャンプ物理
       if (state.p1.y > 0 || state.p1.vy > 0) {
         state.p1.y += state.p1.vy;
