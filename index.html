@@ -29,36 +29,50 @@
 
   /* ドット風（CSSで擬似ドット） */
   #winnerText{
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    font-weight: 900;
-    font-size: clamp(42px, 8vw, 88px);
-    letter-spacing: .12em;
-    text-transform: uppercase;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-weight: 900;
+  font-size: clamp(46px, 9vw, 96px);
+  letter-spacing: .10em;
+  text-transform: uppercase;
 
-    /* ドットっぽいテクスチャ */
-    background-image: radial-gradient(circle, rgba(255,255,255,.95) 35%, rgba(255,255,255,0) 37%);
-    background-size: 10px 10px;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  /* 赤いドット柄（見やすくするためドットを少し大きく＆密度UP） */
+  background-image: radial-gradient(circle, rgba(255,60,60,.98) 48%, rgba(255,60,60,0) 50%);
+  background-size: 8px 8px;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 
-    /* 太さ補正 */
-    -webkit-text-stroke: 2px rgba(0,0,0,.55);
-    text-shadow:
-      0 6px 0 rgba(0,0,0,.25),
-      0 18px 40px rgba(0,0,0,.55);
+  /* 白フチ（太め） */
+  -webkit-text-stroke: 3px rgba(255,255,255,.95);
 
-    /* 点滅＋軽いズーム */
-    animation: blinkDot 0.75s steps(1, end) infinite, pop 0.25s ease-out 1;
-  }
-  @keyframes blinkDot{
-    0%, 49% { opacity: 1; }
-    50%, 100% { opacity: .12; }
-  }
-  @keyframes pop{
-    0% { transform: scale(.92); }
-    100% { transform: scale(1); }
-  }
+  /* さらに外側に黒影でコントラスト */
+  text-shadow:
+    0 3px 0 rgba(0,0,0,.25),
+    0 10px 28px rgba(0,0,0,.65);
+
+  /* 初期はKO用（後でクラスで切り替える） */
+  animation: koBlink .22s steps(1, end) infinite, pop .22s ease-out 1;
+}
+
+/* KOは速い点滅 */
+@keyframes koBlink{
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .10; }
+}
+
+/* WINは少しゆっくり点滅（クラスで付け替える） */
+#winnerText.win{
+  animation: winBlink .75s steps(1, end) infinite, pop .22s ease-out 1;
+}
+@keyframes winBlink{
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .12; }
+}
+
+@keyframes pop{
+  0% { transform: scale(.92); }
+  100% { transform: scale(1); }
+}
 
   /* ===== キャラ（CSSだけで人型っぽく） ===== */
   .fighter{
