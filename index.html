@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Mini Fight (Hadouken + Guard + Kick Leg)</title>
+<title>Mini Fight (Win Overlay)</title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; background:#111; color:#fff; touch-action:none; }
   #ui { position:fixed; top:0; left:0; right:0; padding:10px; display:flex; gap:10px; align-items:center; z-index:10; background:linear-gradient(#111, rgba(17,17,17,.2)); }
@@ -14,15 +14,58 @@
   #arena { position:fixed; left:0; right:0; top:44px; bottom:150px; background:radial-gradient(circle at 50% 20%, #222, #0b0b0b 65%); overflow:hidden; }
   #ground { position:absolute; left:0; right:0; bottom:0; height:18px; background:#1f1f1f; box-shadow: 0 -1px 0 rgba(255,255,255,.05) inset; }
 
+  /* ===== 勝敗オーバーレイ（中央・ドット風・点滅） ===== */
+  #overlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:999;
+    pointer-events:none; /* ボタン押せるように */
+    background: radial-gradient(circle at 50% 50%, rgba(0,0,0,.35), rgba(0,0,0,.15) 55%, transparent 75%);
+  }
+  #overlay.show{ display:flex; }
+
+  /* ドット風（CSSで擬似ドット） */
+  #winnerText{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-weight: 900;
+    font-size: clamp(42px, 8vw, 88px);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+
+    /* ドットっぽいテクスチャ */
+    background-image: radial-gradient(circle, rgba(255,255,255,.95) 35%, rgba(255,255,255,0) 37%);
+    background-size: 10px 10px;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+
+    /* 太さ補正 */
+    -webkit-text-stroke: 2px rgba(0,0,0,.55);
+    text-shadow:
+      0 6px 0 rgba(0,0,0,.25),
+      0 18px 40px rgba(0,0,0,.55);
+
+    /* 点滅＋軽いズーム */
+    animation: blinkDot 0.75s steps(1, end) infinite, pop 0.25s ease-out 1;
+  }
+  @keyframes blinkDot{
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: .12; }
+  }
+  @keyframes pop{
+    0% { transform: scale(.92); }
+    100% { transform: scale(1); }
+  }
+
   /* ===== キャラ（CSSだけで人型っぽく） ===== */
   .fighter{
     position:absolute; bottom:18px;
     width:64px; height:96px;
-
-    /* 胴体 */
     border-radius:18px 18px 14px 14px;
     box-shadow: 0 10px 25px rgba(0,0,0,.35);
-
     user-select:none;
     will-change:left, bottom, transform, filter;
     transition: filter .06s linear, transform .06s linear;
@@ -31,7 +74,6 @@
   #p1 { background:#3498db; }
   #cpu { background:#e74c3c; transform: scaleX(-1); }
 
-  /* 頭 */
   .fighter::before{
     content:"";
     position:absolute;
@@ -44,7 +86,6 @@
     box-shadow: 0 6px 14px rgba(0,0,0,.25);
   }
 
-  /* 腕＋足（ベース） */
   .fighter::after{
     content:"";
     position:absolute;
@@ -53,23 +94,16 @@
     width:88px; height:74px;
     transform: translateX(-50%);
     pointer-events:none;
-
     background:
-      /* 左腕 */
       linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 0% 18% / 18px 42px no-repeat,
-      /* 右腕 */
       linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 100% 18% / 18px 42px no-repeat,
-      /* 左足 */
       linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 38% 100% / 14px 18px no-repeat,
-      /* 右足 */
       linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat;
-
     filter: drop-shadow(0 6px 10px rgba(0,0,0,.25));
   }
 
   .name { position:absolute; top:-22px; left:0; right:0; text-align:center; font-size:12px; opacity:.9; font-weight:800; }
 
-  /* 胴の模様 */
   .face{
     position:absolute;
     left:10px; right:10px;
@@ -80,7 +114,6 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
   }
 
-  /* ===== 近接ヒットボックス（判定じゃなく見た目） ===== */
   .hitbox{
     position:absolute;
     bottom:26px;
@@ -92,11 +125,9 @@
   }
   #p1.punching .hitbox{ width:40px; background:rgba(255,255,255,.28); opacity:1; }
   #p1.kicking  .hitbox{ width:72px; background:rgba(255,255,255,.18); opacity:1; }
-
   #cpu.punching .hitbox{ width:40px; background:rgba(255,255,255,.28); opacity:1; }
   #cpu.kicking  .hitbox{ width:72px; background:rgba(255,255,255,.18); opacity:1; }
 
-  /* ===== ガード中 ===== */
   .guarding{ filter: brightness(.65) saturate(.9); }
   .guarding::before{ background: rgba(255,255,255,.08); }
   .guarding::after{
@@ -107,7 +138,6 @@
       linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat;
   }
 
-  /* ===== 弱P：腕が前に ===== */
   .punching::after{
     background:
       linear-gradient(rgba(255,255,255,.20), rgba(255,255,255,.20)) 10% 18% / 24px 36px no-repeat,
@@ -116,16 +146,12 @@
       linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat;
   }
 
-  /* ===== 強K：足が前に出る（スト2感） ===== */
   .kicking::after{
     background:
-      /* 腕 */
       linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 0% 18% / 18px 42px no-repeat,
       linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) 100% 18% / 18px 42px no-repeat,
-      /* 足（ベース） */
       linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 38% 100% / 14px 18px no-repeat,
       linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat,
-      /* ★蹴り足（前に伸びる） */
       linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28)) 92% 76% / 44px 12px no-repeat,
       radial-gradient(circle, rgba(0,0,0,.30) 0 55%, transparent 56%) 98% 80% / 16px 16px no-repeat;
 
@@ -138,12 +164,10 @@
     100% { transform: translateX(-50%) translateX(6px) scaleX(1); }
   }
 
-  /* 波動拳発射っぽい発光（👊の瞬間にpunchingが付く） */
   .punching::before{
     box-shadow: 0 0 18px rgba(120,200,255,.55), 0 6px 14px rgba(0,0,0,.25);
   }
 
-  /* ===== 波動拳（弾） ===== */
   .proj{
     position:absolute;
     width:18px; height:18px;
@@ -153,7 +177,6 @@
     will-change:left, bottom;
   }
 
-  /* ===== 操作UI ===== */
   #controls{
     position:fixed; left:0; right:0; bottom:0; height:150px;
     display:flex; gap:12px; padding:12px;
@@ -181,6 +204,10 @@
 </style>
 </head>
 <body>
+  <div id="overlay" aria-hidden="true">
+    <div id="winnerText">YOU WIN</div>
+  </div>
+
   <div id="ui">
     <div class="bar"><div id="hp1"></div></div>
     <div id="msg">FIGHT!</div>
@@ -218,30 +245,24 @@
 
 <script>
 (() => {
-  // ======= 調整ポイント =======
   const MAX_HP = 100;
   const MOVE_SPEED = 5;
 
-  // ジャンプ
   const JUMP_V = 14;
   const GRAVITY = 0.75;
   const LAND_LAG_MS = 150;
 
-  // CPU
   const CPU_THINK_MS = 160;
 
-  // ガード
   const GUARD_MULT = 0.33;
   const GUARD_PUSH_MULT = 0.35;
   const GUARD_HITSTOP_MS = 60;
 
-  // 攻撃2種
   const ATTACKS = {
     punch: { label:'PUNCH', dmg: 7,  range: 52, activeMs: 90,  recoveryMs: 140, cooldownMs: 220, push: 8 },
     kick:  { label:'KICK',  dmg: 13, range: 78, activeMs: 130, recoveryMs: 260, cooldownMs: 420, push: 12 }
   };
 
-  // 波動拳
   const HADOU = {
     dmg: 11,
     speed: 7.2,
@@ -251,7 +272,6 @@
     recoveryMs: 220,
     inputWindowMs: 1200
   };
-  // ============================
 
   const arena = document.getElementById('arena');
   const p1El = document.getElementById('p1');
@@ -259,6 +279,9 @@
   const hp1El = document.getElementById('hp1');
   const hp2El = document.getElementById('hp2');
   const msgEl = document.getElementById('msg');
+
+  const overlayEl = document.getElementById('overlay');
+  const winnerTextEl = document.getElementById('winnerText');
 
   const btnL = document.getElementById('left');
   const btnD = document.getElementById('down');
@@ -277,7 +300,7 @@
       lastAtkAt:{punch:0,kick:0},
       guarding:false,
       lastHadouAt: 0,
-      inputSeq: [] // {k:'D'|'R', t:ms}
+      inputSeq: []
     },
     cpu:{
       x:0,
@@ -286,12 +309,22 @@
     },
     input:{ left:false, right:false, down:false },
     lastCpuThink: 0,
-    projectiles: [] // {x, vx, el}
+    projectiles: []
   };
 
   const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
   const nowMs = ()=>performance.now();
   const setMsg = (t)=>{ msgEl.textContent = t; };
+
+  function showWinner(text){
+    winnerTextEl.textContent = text;
+    overlayEl.classList.add('show');
+    overlayEl.setAttribute('aria-hidden', 'false');
+  }
+  function hideWinner(){
+    overlayEl.classList.remove('show');
+    overlayEl.setAttribute('aria-hidden', 'true');
+  }
 
   function hpColor(hp){
     const r = hp / MAX_HP;
@@ -332,12 +365,21 @@
   }
 
   function endIfDead(){
-    if (state.p1.hp <= 0) { state.running = false; setMsg('CPU WIN!'); return true; }
-    if (state.cpu.hp <= 0){ state.running = false; setMsg('YOU WIN!'); return true; }
+    if (state.p1.hp <= 0) {
+      state.running = false;
+      setMsg('CPU WIN!');
+      showWinner('CPU WIN');
+      return true;
+    }
+    if (state.cpu.hp <= 0){
+      state.running = false;
+      setMsg('YOU WIN!');
+      showWinner('YOU WIN');
+      return true;
+    }
     return false;
   }
 
-  // スマホ安定タップ
   function bindTap(btn, fn){
     const handler = (e) => { e.preventDefault?.(); fn(); };
     btn.addEventListener('pointerdown', handler, { passive:false });
@@ -346,7 +388,6 @@
     btn.addEventListener('click', (e)=>{ e.preventDefault(); fn(); });
   }
 
-  // 押しっぱ（移動/コマンド）
   function bindHold(btn, key){
     const on  = (e)=>{ e.preventDefault?.(); state.input[key]=true; onInputKey(key); };
     const off = (e)=>{ e.preventDefault?.(); state.input[key]=false; };
@@ -393,7 +434,6 @@
     }
   }
 
-  // コマンド入力（↓と→）
   function onInputKey(key){
     const t = nowMs();
     const k = (key === 'down') ? 'D' : (key === 'right' ? 'R' : (key === 'left' ? 'L' : '?'));
@@ -403,7 +443,6 @@
     }
   }
 
-  // スマホ向け：↓を押した直後で、いま→押してたらOK
   function hadouCommandReady(){
     const t = nowMs();
     state.p1.inputSeq = state.p1.inputSeq.filter(x => (t - x.t) <= HADOU.inputWindowMs);
@@ -412,9 +451,7 @@
     return recentDown && rightHeld;
   }
 
-  function clearHadouSeq(){
-    state.p1.inputSeq.length = 0;
-  }
+  function clearHadouSeq(){ state.p1.inputSeq.length = 0; }
 
   function spawnHadouken(){
     const t = nowMs();
@@ -430,7 +467,6 @@
     el.className = 'proj';
     arena.appendChild(el);
 
-    // 右向き固定（最小構成）
     const startX = state.p1.x + 64;
     state.projectiles.push({ x: startX, vx: HADOU.speed, el });
 
@@ -444,9 +480,8 @@
     if (state.p1.y > 0) { setMsg('AIR'); return; }
     if (t < state.p1.lockUntil) return;
 
-    // 👊でコマンド成立 → 波動拳優先
     if (type === 'punch' && hadouCommandReady()) {
-      showAttackAnim(p1El, 'punch', 120); // 発射っぽい見た目
+      showAttackAnim(p1El, 'punch', 120);
       spawnHadouken();
       render();
       return;
@@ -582,21 +617,20 @@
     for (const p of state.projectiles) p.el.remove();
     state.projectiles.length = 0;
 
+    hideWinner();
     setMsg('FIGHT!');
     layoutInit();
   }
 
-  // 入力
   bindHold(btnL, 'left');
   bindHold(btnD, 'down');
   bindHold(btnR, 'right');
 
   bindTap(btnJ, () => doJump());
-  bindTap(btnP, () => doAttackP1('punch')); // ↓ + →(押しっぱOK) + 👊
+  bindTap(btnP, () => doAttackP1('punch'));
   bindTap(btnK, () => doAttackP1('kick'));
   bindTap(btnRe, () => reset());
 
-  // ループ
   function tick(t){
     if (state.running) {
       state.p1.guarding = isP1GuardInput();
@@ -621,19 +655,4 @@
       updateProjectiles();
 
       if (t - state.lastCpuThink > CPU_THINK_MS) {
-        state.lastCpuThink = t;
-        cpuThink();
-      }
-    }
-
-    render();
-    requestAnimationFrame(tick);
-  }
-
-  window.addEventListener('resize', layoutInit);
-  layoutInit();
-  requestAnimationFrame(tick);
-})();
-</script>
-</body>
-</html>
+        state
