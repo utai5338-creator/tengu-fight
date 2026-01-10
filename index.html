@@ -331,10 +331,11 @@
   const nowMs = ()=>performance.now();
   const setMsg = (t)=>{ msgEl.textContent = t; };
 
-  function showWinner(text){
-    winnerTextEl.textContent = text;
-    overlayEl.classList.add('show');
-    overlayEl.setAttribute('aria-hidden', 'false');
+  function showWinner(text, mode = 'win'){
+  winnerTextEl.textContent = text;
+  winnerTextEl.classList.toggle('win', mode === 'win'); // WIN時だけゆっくり点滅
+  overlayEl.classList.add('show');
+  overlayEl.setAttribute('aria-hidden', 'false');
   }
   function hideWinner(){
     overlayEl.classList.remove('show');
