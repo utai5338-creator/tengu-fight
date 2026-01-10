@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Mini Fight (Win Overlay)</title>
+<title>Mini Fight (ROUND + KO + WIN)</title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; background:#111; color:#fff; touch-action:none; }
   #ui { position:fixed; top:0; left:0; right:0; padding:10px; display:flex; gap:10px; align-items:center; z-index:10; background:linear-gradient(#111, rgba(17,17,17,.2)); }
@@ -14,67 +14,45 @@
   #arena { position:fixed; left:0; right:0; top:44px; bottom:150px; background:radial-gradient(circle at 50% 20%, #222, #0b0b0b 65%); overflow:hidden; }
   #ground { position:absolute; left:0; right:0; bottom:0; height:18px; background:#1f1f1f; box-shadow: 0 -1px 0 rgba(255,255,255,.05) inset; }
 
-  /* ===== 勝敗オーバーレイ（中央・ドット風・点滅） ===== */
+  /* ===== オーバーレイ（ROUND/FIGHT/KO/WIN） ===== */
   #overlay{
-    position:fixed;
-    inset:0;
+    position:fixed; inset:0;
     display:none;
-    align-items:center;
-    justify-content:center;
+    align-items:center; justify-content:center;
     z-index:999;
-    pointer-events:none; /* ボタン押せるように */
+    pointer-events:none;
     background: radial-gradient(circle at 50% 50%, rgba(0,0,0,.35), rgba(0,0,0,.15) 55%, transparent 75%);
   }
   #overlay.show{ display:flex; }
 
-  /* ドット風（CSSで擬似ドット） */
+  /* 赤ドット + 白フチ */
   #winnerText{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-weight: 900;
-  font-size: clamp(46px, 9vw, 96px);
-  letter-spacing: .10em;
-  text-transform: uppercase;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-weight: 900;
+    font-size: clamp(46px, 9vw, 96px);
+    letter-spacing: .10em;
+    text-transform: uppercase;
 
-  /* 赤いドット柄（見やすくするためドットを少し大きく＆密度UP） */
-  background-image: radial-gradient(circle, rgba(255,60,60,.98) 48%, rgba(255,60,60,0) 50%);
-  background-size: 8px 8px;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+    background-image: radial-gradient(circle, rgba(255,60,60,.98) 48%, rgba(255,60,60,0) 50%);
+    background-size: 8px 8px;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
 
-  /* 白フチ（太め） */
-  -webkit-text-stroke: 3px rgba(255,255,255,.95);
+    -webkit-text-stroke: 3px rgba(255,255,255,.95);
+    text-shadow:
+      0 3px 0 rgba(0,0,0,.25),
+      0 10px 28px rgba(0,0,0,.65);
 
-  /* さらに外側に黒影でコントラスト */
-  text-shadow:
-    0 3px 0 rgba(0,0,0,.25),
-    0 10px 28px rgba(0,0,0,.65);
+    /* デフォはKO点滅（modeで切替） */
+    animation: koBlink .22s steps(1, end) infinite, pop .22s ease-out 1;
+  }
+  @keyframes koBlink{ 0%,49%{opacity:1} 50%,100%{opacity:.10} }
+  #winnerText.win{ animation: winBlink .75s steps(1,end) infinite, pop .22s ease-out 1; }
+  @keyframes winBlink{ 0%,49%{opacity:1} 50%,100%{opacity:.12} }
+  @keyframes pop{ 0%{transform:scale(.92)} 100%{transform:scale(1)} }
 
-  /* 初期はKO用（後でクラスで切り替える） */
-  animation: koBlink .22s steps(1, end) infinite, pop .22s ease-out 1;
-}
-
-/* KOは速い点滅 */
-@keyframes koBlink{
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: .10; }
-}
-
-/* WINは少しゆっくり点滅（クラスで付け替える） */
-#winnerText.win{
-  animation: winBlink .75s steps(1, end) infinite, pop .22s ease-out 1;
-}
-@keyframes winBlink{
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: .12; }
-}
-
-@keyframes pop{
-  0% { transform: scale(.92); }
-  100% { transform: scale(1); }
-}
-
-  /* ===== キャラ（CSSだけで人型っぽく） ===== */
+  /* ===== キャラ（CSS人型） ===== */
   .fighter{
     position:absolute; bottom:18px;
     width:64px; height:96px;
@@ -99,7 +77,6 @@
     background: rgba(255,255,255,.14);
     box-shadow: 0 6px 14px rgba(0,0,0,.25);
   }
-
   .fighter::after{
     content:"";
     position:absolute;
@@ -168,7 +145,6 @@
       linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat,
       linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28)) 92% 76% / 44px 12px no-repeat,
       radial-gradient(circle, rgba(0,0,0,.30) 0 55%, transparent 56%) 98% 80% / 16px 16px no-repeat;
-
     transform: translateX(-50%) translateX(6px);
     animation: kickSnap 140ms ease-out;
   }
@@ -199,7 +175,6 @@
   }
   .pad { flex:1.2; display:flex; gap:12px; }
   .rightPad { flex:1; display:flex; gap:12px; }
-
   button{
     flex:1;
     border:0; border-radius:18px;
@@ -219,12 +194,12 @@
 </head>
 <body>
   <div id="overlay" aria-hidden="true">
-    <div id="winnerText">YOU WIN</div>
+    <div id="winnerText">ROUND 1</div>
   </div>
 
   <div id="ui">
     <div class="bar"><div id="hp1"></div></div>
-    <div id="msg">FIGHT!</div>
+    <div id="msg">READY</div>
     <div class="bar"><div id="hp2"></div></div>
   </div>
 
@@ -259,6 +234,7 @@
 
 <script>
 (() => {
+  // ======= 調整ポイント =======
   const MAX_HP = 100;
   const MOVE_SPEED = 5;
 
@@ -286,6 +262,7 @@
     recoveryMs: 220,
     inputWindowMs: 1200
   };
+  // ============================
 
   const arena = document.getElementById('arena');
   const p1El = document.getElementById('p1');
@@ -295,7 +272,6 @@
   const msgEl = document.getElementById('msg');
 
   const overlayEl = document.getElementById('overlay');
-  let winTimer = null;
   const winnerTextEl = document.getElementById('winnerText');
 
   const btnL = document.getElementById('left');
@@ -306,8 +282,12 @@
   const btnK = document.getElementById('kick');
   const btnRe = document.getElementById('restart');
 
+  let winTimer = null;
+  let roundTimer = null;
+  let roundNo = 1;
+
   const state = {
-    running: true,
+    running: false, // ROUND演出で開始する
     p1: {
       x:0, y:0, vy:0,
       lockUntil:0,
@@ -331,54 +311,45 @@
   const nowMs = ()=>performance.now();
   const setMsg = (t)=>{ msgEl.textContent = t; };
 
-  function showWinner(text, mode = 'win'){
-  winnerTextEl.textContent = text;
-  winnerTextEl.classList.toggle('win', mode === 'win'); // WIN時だけゆっくり点滅
-  overlayEl.classList.add('show');
-  overlayEl.setAttribute('aria-hidden', 'false');
+  function showWinner(text, mode='win'){
+    winnerTextEl.textContent = text;
+    winnerTextEl.classList.toggle('win', mode === 'win');
+    overlayEl.classList.add('show');
+    overlayEl.setAttribute('aria-hidden', 'false');
   }
   function hideWinner(){
     overlayEl.classList.remove('show');
     overlayEl.setAttribute('aria-hidden', 'true');
   }
-function showKOThenWinner(winner){
-  // winner: 'YOU' or 'CPU'
-  if (winTimer) clearTimeout(winTimer);
 
-  // まずKO（速点滅）
-  showWinner('K.O.', 'ko');
-  setMsg('K.O.');
-function showRoundStart(){
-  if (roundTimer) clearTimeout(roundTimer);
+  function showKOThenWinner(winner){
+    if (winTimer) clearTimeout(winTimer);
+    showWinner('K.O.', 'ko');
+    setMsg('K.O.');
+    winTimer = setTimeout(() => {
+      showWinner(`${winner} WIN`, 'win');
+      setMsg(`${winner} WIN!`);
+    }, 900);
+  }
 
-  state.running = false; // 操作ロック
+  function showRoundStart(){
+    if (roundTimer) clearTimeout(roundTimer);
+    state.running = false;
 
-  // ROUND 表示
-  showWinner(`ROUND ${roundNo}`, 'win');
-  setMsg(`ROUND ${roundNo}`);
+    showWinner(`ROUND ${roundNo}`, 'win');
+    setMsg(`ROUND ${roundNo}`);
 
-  // 0.9秒後に FIGHT!
-  roundTimer = setTimeout(() => {
-    winnerTextEl.classList.remove('win');
-    showWinner('FIGHT!', 'ko'); // 少し派手に
-    setMsg('FIGHT!');
-
-    // さらに0.6秒後に開始
     roundTimer = setTimeout(() => {
-      hideWinner();
-      state.running = true;
-      setMsg('GO!');
-    }, 600);
-  }, 900);
-}
-  // 0.9秒後にWIN（ゆっくり点滅）
-  winTimer = setTimeout(() => {
-    showWinner(`${winner} WIN`, 'win');
-    setMsg(`${winner} WIN!`);
-  }, 900);
-}
-  let roundTimer = null;
-let roundNo = 1;
+      showWinner('FIGHT!', 'ko');
+      setMsg('FIGHT!');
+      roundTimer = setTimeout(() => {
+        hideWinner();
+        state.running = true;
+        setMsg('GO!');
+      }, 600);
+    }, 900);
+  }
+
   function hpColor(hp){
     const r = hp / MAX_HP;
     if (r > 0.6) return '#2ecc71';
@@ -418,18 +389,11 @@ let roundNo = 1;
   }
 
   function endIfDead(){
-  if (state.p1.hp <= 0) {
-    state.running = false;
-    showKOThenWinner('CPU');
-    return true;
+    if (state.p1.hp <= 0) { state.running = false; showKOThenWinner('CPU'); return true; }
+    if (state.cpu.hp <= 0){ state.running = false; showKOThenWinner('YOU'); return true; }
+    return false;
   }
-  if (state.cpu.hp <= 0){
-    state.running = false;
-    showKOThenWinner('YOU');
-    return true;
-  }
-  return false;
-  }
+
   function bindTap(btn, fn){
     const handler = (e) => { e.preventDefault?.(); fn(); };
     btn.addEventListener('pointerdown', handler, { passive:false });
@@ -453,13 +417,8 @@ let roundNo = 1;
     btn.addEventListener('mouseleave', off);
   }
 
-  function setP1Lock(t, ms){
-    state.p1.lockUntil = Math.max(state.p1.lockUntil, t + ms);
-  }
-
-  function canUseAttack(who, type, t){
-    return (t - who.lastAtkAt[type]) >= ATTACKS[type].cooldownMs;
-  }
+  function setP1Lock(t, ms){ state.p1.lockUntil = Math.max(state.p1.lockUntil, t + ms); }
+  function canUseAttack(who, type, t){ return (t - who.lastAtkAt[type]) >= ATTACKS[type].cooldownMs; }
 
   function showAttackAnim(el, type, ms){
     el.classList.remove('punching','kicking');
@@ -478,10 +437,7 @@ let roundNo = 1;
     const t = nowMs();
     if (!state.running) return;
     if (t < state.p1.lockUntil) return;
-    if (state.p1.y === 0) {
-      state.p1.vy = JUMP_V;
-      setMsg('JUMP!');
-    }
+    if (state.p1.y === 0) { state.p1.vy = JUMP_V; setMsg('JUMP!'); }
   }
 
   function onInputKey(key){
@@ -587,11 +543,8 @@ let roundNo = 1;
 
     showAttackAnim(cpuEl, type, spec.activeMs);
 
-    if (distance() <= spec.range) {
-      applyHitToP1(spec.dmg, spec.push);
-    } else {
-      setMsg(`CPU ${spec.label} MISS`);
-    }
+    if (distance() <= spec.range) applyHitToP1(spec.dmg, spec.push);
+    else setMsg(`CPU ${spec.label} MISS`);
 
     endIfDead();
     render();
@@ -601,13 +554,11 @@ let roundNo = 1;
     const d = distance();
     const toward = (state.p1.x > state.cpu.x) ? 1 : -1;
 
-    if (d > 120) {
-      state.cpu.x += toward * MOVE_SPEED * 0.85;
-    } else {
+    if (d > 120) state.cpu.x += toward * MOVE_SPEED * 0.85;
+    else {
       const r = Math.random();
       if (d <= ATTACKS.kick.range && r < 0.55) doAttackCPU('kick');
       else doAttackCPU('punch');
-
       if (Math.random() < 0.22) state.cpu.x -= toward * MOVE_SPEED * 0.7;
     }
     state.cpu.x = clamp(state.cpu.x, 0, arena.clientWidth - 64);
@@ -644,7 +595,11 @@ let roundNo = 1;
   }
 
   function reset(){
-    state.running = true;
+    // タイマー整理
+    if (winTimer) { clearTimeout(winTimer); winTimer = null; }
+    if (roundTimer) { clearTimeout(roundTimer); roundTimer = null; }
+
+    // 状態リセット
     state.p1.hp = MAX_HP;
     state.cpu.hp = MAX_HP;
 
@@ -666,12 +621,17 @@ let roundNo = 1;
 
     for (const p of state.projectiles) p.el.remove();
     state.projectiles.length = 0;
-if (winTimer) { clearTimeout(winTimer); winTimer = null; }
-winnerTextEl.classList.remove('win');
+
     hideWinner();
-layoutInit();
-showRoundStart();
-    
+    layoutInit();
+    showRoundStart();
+  }
+  hideWinner();
+    layoutInit();
+    showRoundStart();
+  }
+
+  // 入力
   bindHold(btnL, 'left');
   bindHold(btnD, 'down');
   bindHold(btnR, 'right');
@@ -685,6 +645,7 @@ showRoundStart();
     if (state.running) {
       state.p1.guarding = isP1GuardInput();
 
+      // ジャンプ物理
       if (state.p1.y > 0 || state.p1.vy > 0) {
         state.p1.y += state.p1.vy;
         state.p1.vy -= GRAVITY;
@@ -696,6 +657,7 @@ showRoundStart();
         }
       }
 
+      // 移動（硬直中は不可）
       if (t >= state.p1.lockUntil) {
         if (state.input.left)  state.p1.x -= MOVE_SPEED;
         if (state.input.right) state.p1.x += MOVE_SPEED;
@@ -704,6 +666,7 @@ showRoundStart();
 
       updateProjectiles();
 
+      // CPU
       if (t - state.lastCpuThink > CPU_THINK_MS) {
         state.lastCpuThink = t;
         cpuThink();
@@ -715,9 +678,11 @@ showRoundStart();
   }
 
   window.addEventListener('resize', layoutInit);
+
+  // 起動
   layoutInit();
-showRoundStart();
-requestAnimationFrame(tick);
+  showRoundStart();
+  requestAnimationFrame(tick);
 })();
 </script>
 </body>
