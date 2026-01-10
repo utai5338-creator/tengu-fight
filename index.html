@@ -348,13 +348,37 @@ function showKOThenWinner(winner){
   // まずKO（速点滅）
   showWinner('K.O.', 'ko');
   setMsg('K.O.');
+function showRoundStart(){
+  if (roundTimer) clearTimeout(roundTimer);
 
+  state.running = false; // 操作ロック
+
+  // ROUND 表示
+  showWinner(`ROUND ${roundNo}`, 'win');
+  setMsg(`ROUND ${roundNo}`);
+
+  // 0.9秒後に FIGHT!
+  roundTimer = setTimeout(() => {
+    winnerTextEl.classList.remove('win');
+    showWinner('FIGHT!', 'ko'); // 少し派手に
+    setMsg('FIGHT!');
+
+    // さらに0.6秒後に開始
+    roundTimer = setTimeout(() => {
+      hideWinner();
+      state.running = true;
+      setMsg('GO!');
+    }, 600);
+  }, 900);
+}
   // 0.9秒後にWIN（ゆっくり点滅）
   winTimer = setTimeout(() => {
     showWinner(`${winner} WIN`, 'win');
     setMsg(`${winner} WIN!`);
   }, 900);
 }
+  let roundTimer = null;
+let roundNo = 1;
   function hpColor(hp){
     const r = hp / MAX_HP;
     if (r > 0.6) return '#2ecc71';
@@ -645,10 +669,9 @@ function showKOThenWinner(winner){
 if (winTimer) { clearTimeout(winTimer); winTimer = null; }
 winnerTextEl.classList.remove('win');
     hideWinner();
-    setMsg('FIGHT!');
-    layoutInit();
-  }
-
+layoutInit();
+showRoundStart();
+    
   bindHold(btnL, 'left');
   bindHold(btnD, 'down');
   bindHold(btnR, 'right');
@@ -693,7 +716,8 @@ winnerTextEl.classList.remove('win');
 
   window.addEventListener('resize', layoutInit);
   layoutInit();
-  requestAnimationFrame(tick);
+showRoundStart();
+requestAnimationFrame(tick);
 })();
 </script>
 </body>
