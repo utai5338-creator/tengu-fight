@@ -341,7 +341,20 @@
     overlayEl.classList.remove('show');
     overlayEl.setAttribute('aria-hidden', 'true');
   }
+function showKOThenWinner(winner){
+  // winner: 'YOU' or 'CPU'
+  if (winTimer) clearTimeout(winTimer);
 
+  // まずKO（速点滅）
+  showWinner('K.O.', 'ko');
+  setMsg('K.O.');
+
+  // 0.9秒後にWIN（ゆっくり点滅）
+  winTimer = setTimeout(() => {
+    showWinner(`${winner} WIN`, 'win');
+    setMsg(`${winner} WIN!`);
+  }, 900);
+}
   function hpColor(hp){
     const r = hp / MAX_HP;
     if (r > 0.6) return '#2ecc71';
@@ -381,21 +394,18 @@
   }
 
   function endIfDead(){
-    if (state.p1.hp <= 0) {
-      state.running = false;
-      setMsg('CPU WIN!');
-      showWinner('CPU WIN');
-      return true;
-    }
-    if (state.cpu.hp <= 0){
-      state.running = false;
-      setMsg('YOU WIN!');
-      showWinner('YOU WIN');
-      return true;
-    }
-    return false;
+  if (state.p1.hp <= 0) {
+    state.running = false;
+    showKOThenWinner('CPU');
+    return true;
   }
-
+  if (state.cpu.hp <= 0){
+    state.running = false;
+    showKOThenWinner('YOU');
+    return true;
+  }
+  return false;
+  }
   function bindTap(btn, fn){
     const handler = (e) => { e.preventDefault?.(); fn(); };
     btn.addEventListener('pointerdown', handler, { passive:false });
@@ -632,7 +642,8 @@
 
     for (const p of state.projectiles) p.el.remove();
     state.projectiles.length = 0;
-
+if (winTimer) { clearTimeout(winTimer); winTimer = null; }
+winnerTextEl.classList.remove('win');
     hideWinner();
     setMsg('FIGHT!');
     layoutInit();
