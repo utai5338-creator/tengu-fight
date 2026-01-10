@@ -655,4 +655,19 @@
       updateProjectiles();
 
       if (t - state.lastCpuThink > CPU_THINK_MS) {
-        state
+        state.lastCpuThink = t;
+        cpuThink();
+      }
+    }
+
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  window.addEventListener('resize', layoutInit);
+  layoutInit();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
