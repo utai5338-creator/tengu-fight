@@ -3,15 +3,37 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Mini Fight (ROUND + KO + WIN)</title>
+<title>Mini Fight (Best of 3 + Facing Fix)</title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; background:#111; color:#fff; touch-action:none; }
-  #ui { position:fixed; top:0; left:0; right:0; padding:10px; display:flex; gap:10px; align-items:center; z-index:10; background:linear-gradient(#111, rgba(17,17,17,.2)); }
-  .bar { flex:1; height:14px; background:#333; border-radius:999px; overflow:hidden; }
+  #ui {
+    position:fixed; top:0; left:0; right:0;
+    padding:10px; display:flex; gap:10px; align-items:center;
+    z-index:10; background:linear-gradient(#111, rgba(17,17,17,.2));
+  }
+  .side{ flex:1; display:flex; flex-direction:column; gap:6px; }
+  .bar { height:14px; background:#333; border-radius:999px; overflow:hidden; }
   .bar > div { height:100%; width:100%; transition: width .08s linear, background .2s; }
-  #msg { min-width:12em; text-align:center; font-weight:900; letter-spacing:.5px; }
+  .wins{
+    display:flex; gap:6px; align-items:center;
+    font-weight:900; font-size:12px; opacity:.9;
+  }
+  .dot{
+    width:10px; height:10px; border-radius:999px;
+    background:rgba(255,255,255,.18);
+    box-shadow: 0 4px 10px rgba(0,0,0,.35);
+  }
+  .dot.on{ background:rgba(255,255,255,.92); }
+  .label{ letter-spacing:.12em; opacity:.8; }
 
-  #arena { position:fixed; left:0; right:0; top:44px; bottom:150px; background:radial-gradient(circle at 50% 20%, #222, #0b0b0b 65%); overflow:hidden; }
+  #mid{
+    min-width:14em;
+    text-align:center; font-weight:900; letter-spacing:.5px;
+  }
+  #msg{ font-size:14px; opacity:.9; }
+  #roundHud{ font-size:12px; opacity:.8; letter-spacing:.14em; margin-top:2px; }
+
+  #arena { position:fixed; left:0; right:0; top:66px; bottom:150px; background:radial-gradient(circle at 50% 20%, #222, #0b0b0b 65%); overflow:hidden; }
   #ground { position:absolute; left:0; right:0; bottom:0; height:18px; background:#1f1f1f; box-shadow: 0 -1px 0 rgba(255,255,255,.05) inset; }
 
   /* ===== オーバーレイ（ROUND/FIGHT/KO/WIN） ===== */
@@ -44,7 +66,6 @@
       0 3px 0 rgba(0,0,0,.25),
       0 10px 28px rgba(0,0,0,.65);
 
-    /* デフォはKO点滅（modeで切替） */
     animation: koBlink .22s steps(1, end) infinite, pop .22s ease-out 1;
   }
   @keyframes koBlink{ 0%,49%{opacity:1} 50%,100%{opacity:.10} }
@@ -62,9 +83,10 @@
     will-change:left, bottom, transform, filter;
     transition: filter .06s linear, transform .06s linear;
     overflow: visible;
+    transform-origin: 50% 50%;
   }
   #p1 { background:#3498db; }
-  #cpu { background:#e74c3c; transform: scaleX(-1); }
+  #cpu { background:#e74c3c; }
 
   .fighter::before{
     content:"";
@@ -94,7 +116,6 @@
   }
 
   .name { position:absolute; top:-22px; left:0; right:0; text-align:center; font-size:12px; opacity:.9; font-weight:800; }
-
   .face{
     position:absolute;
     left:10px; right:10px;
@@ -105,6 +126,7 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
   }
 
+  /* ヒットボックス（右側に置く）→ キャラ全体をscaleXで反転すると自然に相手側になる */
   .hitbox{
     position:absolute;
     bottom:26px;
@@ -145,17 +167,6 @@
       linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)) 62% 100% / 14px 18px no-repeat,
       linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28)) 92% 76% / 44px 12px no-repeat,
       radial-gradient(circle, rgba(0,0,0,.30) 0 55%, transparent 56%) 98% 80% / 16px 16px no-repeat;
-    transform: translateX(-50%) translateX(6px);
-    animation: kickSnap 140ms ease-out;
-  }
-  @keyframes kickSnap{
-    0%   { transform: translateX(-50%) translateX(0px) scaleX(1); }
-    60%  { transform: translateX(-50%) translateX(10px) scaleX(1.02); }
-    100% { transform: translateX(-50%) translateX(6px) scaleX(1); }
-  }
-
-  .punching::before{
-    box-shadow: 0 0 18px rgba(120,200,255,.55), 0 6px 14px rgba(0,0,0,.25);
   }
 
   .proj{
@@ -198,9 +209,28 @@
   </div>
 
   <div id="ui">
-    <div class="bar"><div id="hp1"></div></div>
-    <div id="msg">READY</div>
-    <div class="bar"><div id="hp2"></div></div>
+    <div class="side">
+      <div class="bar"><div id="hp1"></div></div>
+      <div class="wins">
+        <span class="label">YOU</span>
+        <span id="p1w1" class="dot"></span>
+        <span id="p1w2" class="dot"></span>
+      </div>
+    </div>
+
+    <div id="mid">
+      <div id="msg">READY</div>
+      <div id="roundHud">ROUND 1</div>
+    </div>
+
+    <div class="side">
+      <div class="bar"><div id="hp2"></div></div>
+      <div class="wins" style="justify-content:flex-end;">
+        <span id="cpuw1" class="dot"></span>
+        <span id="cpuw2" class="dot"></span>
+        <span class="label">CPU</span>
+      </div>
+    </div>
   </div>
 
   <div id="arena">
@@ -262,6 +292,11 @@
     recoveryMs: 220,
     inputWindowMs: 1200
   };
+
+  const ROUND_SHOW_MS = 900;
+  const FIGHT_SHOW_MS = 600;
+  const KO_TO_WIN_MS   = 900;
+  const WIN_TO_NEXT_MS = 900;
   // ============================
 
   const arena = document.getElementById('arena');
@@ -270,9 +305,15 @@
   const hp1El = document.getElementById('hp1');
   const hp2El = document.getElementById('hp2');
   const msgEl = document.getElementById('msg');
+  const roundHudEl = document.getElementById('roundHud');
 
   const overlayEl = document.getElementById('overlay');
   const winnerTextEl = document.getElementById('winnerText');
+
+  const p1w1 = document.getElementById('p1w1');
+  const p1w2 = document.getElementById('p1w2');
+  const cpuw1 = document.getElementById('cpuw1');
+  const cpuw2 = document.getElementById('cpuw2');
 
   const btnL = document.getElementById('left');
   const btnD = document.getElementById('down');
@@ -284,10 +325,16 @@
 
   let winTimer = null;
   let roundTimer = null;
-  let roundNo = 1;
+
+  const match = {
+    roundNo: 1,
+    p1Wins: 0,
+    cpuWins: 0,
+    matchOver: false
+  };
 
   const state = {
-    running: false, // ROUND演出で開始する
+    running: false,
     p1: {
       x:0, y:0, vy:0,
       lockUntil:0,
@@ -311,6 +358,27 @@
   const nowMs = ()=>performance.now();
   const setMsg = (t)=>{ msgEl.textContent = t; };
 
+  function roundLabel(n){
+    if (n === 3) return 'FINAL ROUND';
+    return `ROUND ${n}`;
+  }
+
+  // ===== 向き（Facing） =====
+  // sign = +1 → 右向き / -1 → 左向き
+  function p1FacingSign(){ return (state.cpu.x >= state.p1.x) ? 1 : -1; }
+  function cpuFacingSign(){ return (state.p1.x >= state.cpu.x) ? 1 : -1; }
+
+  // 前入力（Forward）は「相手方向」
+  function p1ForwardHeld(){
+    const s = p1FacingSign();
+    return s === 1 ? state.input.right : state.input.left;
+  }
+  // 後ろ入力（Back）は「相手と逆方向」（ガード用）
+  function p1BackHeld(){
+    const s = p1FacingSign();
+    return s === 1 ? state.input.left : state.input.right;
+  }
+
   function showWinner(text, mode='win'){
     winnerTextEl.textContent = text;
     winnerTextEl.classList.toggle('win', mode === 'win');
@@ -321,33 +389,9 @@
     overlayEl.classList.remove('show');
     overlayEl.setAttribute('aria-hidden', 'true');
   }
-
-  function showKOThenWinner(winner){
-    if (winTimer) clearTimeout(winTimer);
-    showWinner('K.O.', 'ko');
-    setMsg('K.O.');
-    winTimer = setTimeout(() => {
-      showWinner(`${winner} WIN`, 'win');
-      setMsg(`${winner} WIN!`);
-    }, 900);
-  }
-
-  function showRoundStart(){
-    if (roundTimer) clearTimeout(roundTimer);
-    state.running = false;
-
-    showWinner(`ROUND ${roundNo}`, 'win');
-    setMsg(`ROUND ${roundNo}`);
-
-    roundTimer = setTimeout(() => {
-      showWinner('FIGHT!', 'ko');
-      setMsg('FIGHT!');
-      roundTimer = setTimeout(() => {
-        hideWinner();
-        state.running = true;
-        setMsg('GO!');
-      }, 600);
-    }, 900);
+  function clearTimers(){
+    if (winTimer) { clearTimeout(winTimer); winTimer = null; }
+    if (roundTimer) { clearTimeout(roundTimer); roundTimer = null; }
   }
 
   function hpColor(hp){
@@ -355,6 +399,17 @@
     if (r > 0.6) return '#2ecc71';
     if (r > 0.3) return '#f1c40f';
     return '#e74c3c';
+  }
+
+  function updateWinsUI(){
+    p1w1.classList.toggle('on', match.p1Wins >= 1);
+    p1w2.classList.toggle('on', match.p1Wins >= 2);
+    cpuw1.classList.toggle('on', match.cpuWins >= 1);
+    cpuw2.classList.toggle('on', match.cpuWins >= 2);
+  }
+
+  function updateRoundHUD(){
+    roundHudEl.textContent = roundLabel(match.roundNo);
   }
 
   function distance(){
@@ -369,6 +424,12 @@
   }
 
   function render(){
+    // 向きを更新（ここが今回の本丸）
+    const p1S = p1FacingSign();
+    const cpuS = cpuFacingSign();
+    p1El.style.transform = (p1S === 1) ? 'scaleX(1)' : 'scaleX(-1)';
+    cpuEl.style.transform = (cpuS === 1) ? 'scaleX(1)' : 'scaleX(-1)';
+
     p1El.style.left = `${state.p1.x}px`;
     cpuEl.style.left = `${state.cpu.x}px`;
 
@@ -388,10 +449,86 @@
     }
   }
 
-  function endIfDead(){
-    if (state.p1.hp <= 0) { state.running = false; showKOThenWinner('CPU'); return true; }
-    if (state.cpu.hp <= 0){ state.running = false; showKOThenWinner('YOU'); return true; }
-    return false;
+  function cleanupProjectiles(){
+    for (const p of state.projectiles) p.el.remove();
+    state.projectiles.length = 0;
+  }
+
+  function resetRoundState(){
+    state.p1.hp = MAX_HP;
+    state.cpu.hp = MAX_HP;
+
+    state.p1.y = 0;
+    state.p1.vy = 0;
+    state.p1.lockUntil = 0;
+    state.p1.guarding = false;
+    state.p1.lastHadouAt = 0;
+    state.p1.inputSeq.length = 0;
+
+    state.p1.lastAtkAt.punch = 0;
+    state.p1.lastAtkAt.kick = 0;
+    state.cpu.lastAtkAt.punch = 0;
+    state.cpu.lastAtkAt.kick = 0;
+
+    state.input.left = false;
+    state.input.right = false;
+    state.input.down = false;
+
+    cleanupProjectiles();
+    layoutInit();
+    render();
+  }
+
+  function showRoundStart(){
+    clearTimers();
+    state.running = false;
+
+    updateRoundHUD();
+    showWinner(roundLabel(match.roundNo), 'win');
+    setMsg(roundLabel(match.roundNo));
+
+    roundTimer = setTimeout(() => {
+      showWinner('FIGHT!', 'ko');
+      setMsg('FIGHT!');
+      roundTimer = setTimeout(() => {
+        hideWinner();
+        state.running = true;
+        setMsg('GO!');
+      }, FIGHT_SHOW_MS);
+    }, ROUND_SHOW_MS);
+  }
+
+  function endMatch(winner){
+    match.matchOver = true;
+    state.running = false;
+    showWinner(`${winner} WIN`, 'win');
+    setMsg(`${winner} WIN!`);
+  }
+
+  function handleRoundEnd(winner){
+    state.running = false;
+
+    showWinner('K.O.', 'ko');
+    setMsg('K.O.');
+
+    winTimer = setTimeout(() => {
+      showWinner(`${winner} WIN`, 'win');
+      setMsg(`${winner} WIN!`);
+
+      if (winner === 'YOU') match.p1Wins++;
+      else match.cpuWins++;
+      updateWinsUI();
+
+      if (match.p1Wins >= 2) { winTimer = setTimeout(() => endMatch('YOU'), WIN_TO_NEXT_MS); return; }
+      if (match.cpuWins >= 2) { winTimer = setTimeout(() => endMatch('CPU'), WIN_TO_NEXT_MS); return; }
+
+      winTimer = setTimeout(() => {
+        match.roundNo++;
+        resetRoundState();
+        showRoundStart();
+      }, WIN_TO_NEXT_MS);
+
+    }, KO_TO_WIN_MS);
   }
 
   function bindTap(btn, fn){
@@ -426,16 +563,15 @@
     setTimeout(()=>el.classList.remove('punching','kicking'), ms);
   }
 
+  // ガード（後ろ入力）
   function isP1GuardInput(){
     if (state.p1.y > 0) return false;
-    const cpuOnRight = state.cpu.x >= state.p1.x;
-    const backHeld = cpuOnRight ? state.input.left : state.input.right;
-    return !!backHeld;
+    return !!p1BackHeld();
   }
 
   function doJump(){
     const t = nowMs();
-    if (!state.running) return;
+    if (!state.running || match.matchOver) return;
     if (t < state.p1.lockUntil) return;
     if (state.p1.y === 0) { state.p1.vy = JUMP_V; setMsg('JUMP!'); }
   }
@@ -443,25 +579,24 @@
   function onInputKey(key){
     const t = nowMs();
     const k = (key === 'down') ? 'D' : (key === 'right' ? 'R' : (key === 'left' ? 'L' : '?'));
-    if (k === 'D' || k === 'R') {
+    if (k === 'D' || k === 'R' || k === 'L') {
       state.p1.inputSeq.push({k, t});
       state.p1.inputSeq = state.p1.inputSeq.filter(x => (t - x.t) <= HADOU.inputWindowMs);
     }
   }
 
+  // 波動コマンド：下＋前（向きで前が変わる）
   function hadouCommandReady(){
     const t = nowMs();
     state.p1.inputSeq = state.p1.inputSeq.filter(x => (t - x.t) <= HADOU.inputWindowMs);
     const recentDown = state.p1.inputSeq.some(x => x.k === 'D');
-    const rightHeld = !!state.input.right;
-    return recentDown && rightHeld;
+    return recentDown && !!p1ForwardHeld();
   }
-
   function clearHadouSeq(){ state.p1.inputSeq.length = 0; }
 
   function spawnHadouken(){
     const t = nowMs();
-    if (!state.running) return;
+    if (!state.running || match.matchOver) return;
     if (state.p1.y > 0) { setMsg('AIR'); return; }
     if (t < state.p1.lockUntil) return;
     if ((t - state.p1.lastHadouAt) < HADOU.cooldownMs) return;
@@ -469,12 +604,16 @@
     state.p1.lastHadouAt = t;
     setP1Lock(t, HADOU.recoveryMs);
 
+    const s = p1FacingSign();
     const el = document.createElement('div');
     el.className = 'proj';
     arena.appendChild(el);
 
-    const startX = state.p1.x + 64;
-    state.projectiles.push({ x: startX, vx: HADOU.speed, el });
+    // 生成位置＆飛ぶ方向を向きで切替
+    const startX = (s === 1) ? (state.p1.x + 64) : (state.p1.x - 18);
+    const vx = HADOU.speed * s;
+
+    state.projectiles.push({ x: startX, vx, el });
 
     setMsg('HADOUKEN!');
     clearHadouSeq();
@@ -482,7 +621,7 @@
 
   function doAttackP1(type){
     const t = nowMs();
-    if (!state.running) return;
+    if (!state.running || match.matchOver) return;
     if (state.p1.y > 0) { setMsg('AIR'); return; }
     if (t < state.p1.lockUntil) return;
 
@@ -504,12 +643,16 @@
     if (distance() <= spec.range) {
       state.cpu.hp = clamp(state.cpu.hp - spec.dmg, 0, MAX_HP);
       setMsg(`${spec.label}! HIT`);
-      state.cpu.x = clamp(state.cpu.x + (-spec.push), 0, arena.clientWidth - 64);
+
+      // ノックバック：相手から離れる方向へ
+      const dir = (state.cpu.x >= state.p1.x) ? 1 : -1;
+      state.cpu.x = clamp(state.cpu.x + dir * spec.push, 0, arena.clientWidth - 64);
+
+      if (state.cpu.hp <= 0) handleRoundEnd('YOU');
     } else {
       setMsg(`${spec.label}! MISS`);
     }
 
-    endIfDead();
     render();
   }
 
@@ -517,25 +660,30 @@
     const t = nowMs();
     const guarding = state.p1.guarding && isP1GuardInput();
 
+    // push方向：CPUから離れる方向へ
+    const dir = (state.p1.x >= state.cpu.x) ? 1 : -1;
+
     if (guarding) {
       const gdmg = Math.max(1, Math.floor(dmg * GUARD_MULT));
       state.p1.hp = clamp(state.p1.hp - gdmg, 0, MAX_HP);
       setMsg('GUARD!');
       const gpush = Math.round(push * GUARD_PUSH_MULT);
-      state.p1.x = clamp(state.p1.x + gpush, 0, arena.clientWidth - 64);
+      state.p1.x = clamp(state.p1.x + dir * gpush, 0, arena.clientWidth - 64);
       setP1Lock(t, GUARD_HITSTOP_MS);
       return;
     }
 
     state.p1.hp = clamp(state.p1.hp - dmg, 0, MAX_HP);
     setMsg('HIT!');
-    state.p1.x = clamp(state.p1.x + push, 0, arena.clientWidth - 64);
+    state.p1.x = clamp(state.p1.x + dir * push, 0, arena.clientWidth - 64);
     setP1Lock(t, 90);
+
+    if (state.p1.hp <= 0) handleRoundEnd('CPU');
   }
 
   function doAttackCPU(type){
     const t = nowMs();
-    if (!state.running) return;
+    if (!state.running || match.matchOver) return;
     if (!canUseAttack(state.cpu, type, t)) return;
 
     const spec = ATTACKS[type];
@@ -546,7 +694,6 @@
     if (distance() <= spec.range) applyHitToP1(spec.dmg, spec.push);
     else setMsg(`CPU ${spec.label} MISS`);
 
-    endIfDead();
     render();
   }
 
@@ -578,52 +725,37 @@
       if (hit) {
         state.cpu.hp = clamp(state.cpu.hp - HADOU.dmg, 0, MAX_HP);
         setMsg('HADOU HIT!');
-        state.cpu.x = clamp(state.cpu.x - 10, 0, w - 64);
+
+        // 波動のノックバックも相手から離れる方向へ
+        const dir = (state.cpu.x >= state.p1.x) ? 1 : -1;
+        state.cpu.x = clamp(state.cpu.x + dir * 10, 0, w - 64);
 
         p.el.remove();
         state.projectiles.splice(i, 1);
 
-        endIfDead();
+        if (state.cpu.hp <= 0) handleRoundEnd('YOU');
         continue;
       }
 
-      if (p.x > w + 40) {
+      if (p.x < -60 || p.x > w + 60) {
         p.el.remove();
         state.projectiles.splice(i, 1);
       }
     }
   }
 
-  function reset(){
-    // タイマー整理
-    if (winTimer) { clearTimeout(winTimer); winTimer = null; }
-    if (roundTimer) { clearTimeout(roundTimer); roundTimer = null; }
+  function resetMatch(){
+    clearTimers();
 
-    // 状態リセット
-    state.p1.hp = MAX_HP;
-    state.cpu.hp = MAX_HP;
-
-    state.p1.y = 0;
-    state.p1.vy = 0;
-    state.p1.lockUntil = 0;
-    state.p1.guarding = false;
-    state.p1.lastHadouAt = 0;
-    state.p1.inputSeq.length = 0;
-
-    state.p1.lastAtkAt.punch = 0;
-    state.p1.lastAtkAt.kick = 0;
-    state.cpu.lastAtkAt.punch = 0;
-    state.cpu.lastAtkAt.kick = 0;
-
-    state.input.left = false;
-    state.input.right = false;
-    state.input.down = false;
-
-    for (const p of state.projectiles) p.el.remove();
-    state.projectiles.length = 0;
+    match.roundNo = 1;
+    match.p1Wins = 0;
+    match.cpuWins = 0;
+    match.matchOver = false;
+    updateWinsUI();
+    updateRoundHUD();
 
     hideWinner();
-    layoutInit();
+    resetRoundState();
     showRoundStart();
   }
 
@@ -635,10 +767,10 @@
   bindTap(btnJ, () => doJump());
   bindTap(btnP, () => doAttackP1('punch'));
   bindTap(btnK, () => doAttackP1('kick'));
-  bindTap(btnRe, () => reset());
+  bindTap(btnRe, () => resetMatch());
 
   function tick(t){
-    if (state.running) {
+    if (state.running && !match.matchOver) {
       state.p1.guarding = isP1GuardInput();
 
       // ジャンプ物理
@@ -676,6 +808,8 @@
   window.addEventListener('resize', layoutInit);
 
   // 起動
+  updateWinsUI();
+  updateRoundHUD();
   layoutInit();
   showRoundStart();
   requestAnimationFrame(tick);
@@ -683,3 +817,4 @@
 </script>
 </body>
 </html>
+
